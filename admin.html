@@ -449,19 +449,10 @@ tr:hover td { background: #f8fafc; }
         </table>
       </div>
     </div>
-
     <div class="section-card" style="margin-top:16px;border:2px solid #fde047">
-      <div class="section-header" style="background:#fefce8">
-        <h3 style="color:#713f12">🔐 管理員進階功能設定</h3>
-        <span style="font-size:12px;color:#92400e">key 僅存在您的瀏覽器，不會上傳至 GitHub</span>
-      </div>
-      <div style="padding:16px">
-        <label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px">Supabase Service Role Key <span style="font-weight:400;color:#94a3b8">（設定後可自動刪除帳號、直接設定密碼）</span></label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input id="serviceKeyInput" type="password" placeholder="sb_secret_..." style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace">
-          <button onclick="saveServiceKey()" style="background:#ca8a04;color:#fff;border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer">💾 儲存</button>
-          <button onclick="clearServiceKey()" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5;border-radius:7px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer">清除</button>
-        </div>
+      <div class="section-header" style="background:#fefce8"><h3 style="color:#713f12">🔐 管理員進階功能設定</h3><span style="font-size:12px;color:#92400e">key 僅存在瀏覽器，不上傳 GitHub</span></div>
+      <div style="padding:16px"><label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px">Supabase Service Role Key<span style="font-weight:400;color:#94a3b8;margin-left:6px">設定後可自動刪除帳號、直接設定密碼</span></label>
+        <div style="display:flex;gap:8px;align-items:center"><input id="serviceKeyInput" type="password" placeholder="sb_secret_..." style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace"><button onclick="saveServiceKey()" style="background:#ca8a04;color:#fff;border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer">💾 儲存</button><button onclick="clearServiceKey()" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5;border-radius:7px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer">清除</button></div>
         <div id="serviceKeyStatus" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
       </div>
     </div>
@@ -511,8 +502,6 @@ tr:hover td { background: #f8fafc; }
 const SUPABASE_URL = 'https://jpabzycaqybbvebwewrt.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_nNp7DYbaTBtWm39agYBczg_c1sR7-4F';
 let sb;
-let sbAdmin = null;
-const SUPABASE_SERVICE_KEY = (function(){ try{ return localStorage.getItem('sb_service_key') || ''; } catch(e){ return ''; } }());
 
 // ========================
 // 商品資料
@@ -711,9 +700,6 @@ async function doAdminLogout() {
 async function init() {
   const { createClient } = window.supabase;
   sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-  if (SUPABASE_SERVICE_KEY) {
-    try { sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { autoRefreshToken: false, persistSession: false } }); } catch(e) {}
-  }
 
   sb.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') showAdminLogin();
@@ -1575,7 +1561,7 @@ function switchTab(n) {
   if(n===5) renderSettings();
   if(n===6) renderStoreList();
   if(n===7) loadUserList();
-  if(n===8) { renderProductList(); var sk=(function(){try{return localStorage.getItem('sb_service_key');}catch(e){return null;}})(); var inp=document.getElementById('serviceKeyInput'); if(inp&&sk){inp.value=sk; var st=document.getElementById('serviceKeyStatus'); if(st)st.innerHTML='<span style="color:var(--green);font-weight:700">✅ Service key 已設定</span>';}}
+  if(n===8) renderProductList();
 }
 
 // ========================
@@ -1615,7 +1601,8 @@ async function loadUserList() {
       `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border-radius:10px;padding:1px 7px;font-size:11px;margin:1px;${isSuperAdmin?'cursor:pointer':''}" ${isSuperAdmin?`onclick="revokeStore('${p.id}','${s}')" title="點擊移除"`:''}>${s}${isSuperAdmin?' ✕':''}</span>`
     ).join('');
     const unassigned = effectiveStores.filter(s => !stores.includes(s));
-    const storeOptions = (unassigned.length ? '<option value="__ALL__" style="font-weight:700;color:#7c3aed">\ud83c\udf1f 全門市（一次指派所有）</option>' : '') + unassigned.map(s => '<option value="'+s+'">'+s+'</option>').join('');
+    const allOpt = unassigned.length ? '<option value="__ALL__" style="font-weight:700;color:#7c3aed">🌟 全門市（一次指派所有）</option>' : '';
+    const storeOptions = allOpt + unassigned.map(s => `<option value="${s}">${s}</option>`).join('');
     const created = new Date(p.created_at).toLocaleDateString('zh-TW');
     // 角色選擇器（只有 admin 可以改）
     const roleCell = isSuperAdmin
@@ -1645,7 +1632,7 @@ async function loadUserList() {
       </td>
       <td style="text-align:center">
         ${isSuperAdmin ? `
-          <button onclick="resetUserPassword('${p.email}','${p.id}')" class="btn btn-sm" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;margin-bottom:3px">🔑 重設密碼</button>
+          <button onclick="resetUserPassword('${p.email}')" class="btn btn-sm" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;margin-bottom:3px">📧 重設密碼</button>
           <button onclick="suspendUser('${p.id}','${p.email}')" class="btn btn-sm" style="background:#fff7ed;color:var(--orange);border:1px solid #fdba74;margin-bottom:3px">⏸ 停用</button>
           <button onclick="deleteUser('${p.id}','${p.email}')" class="btn btn-sm" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5">🗑 刪除</button>
         ` : ''}
@@ -1658,22 +1645,9 @@ async function grantStore(userId) {
   const sel = document.getElementById(`grant_${userId}`);
   const storeKey = sel.value;
   if (!storeKey) return;
-  if (storeKey === '__ALL__') {
-    if (!confirm('確定一次指派所有門市給此使用者？')) return;
-    const eff = [...ALL_STORE_KEYS, ...cachedCustomStores.map(s=>s.key)];
-    const { data: ex } = await sb.from('user_store_access').select('store_key').eq('user_id', userId);
-    const ass = new Set((ex||[]).map(r=>r.store_key));
-    const toAdd = eff.filter(s=>!ass.has(s)).map(s=>({ user_id: userId, store_key: s }));
-    if (!toAdd.length) { showToast('此使用者已有所有門市權限'); return; }
-    const { error: err2 } = await sb.from('user_store_access').insert(toAdd);
-    if (err2) { showToast('❌ 批次指派失敗'); return; }
-    showToast('✅ 已指派全部 ' + toAdd.length + ' 家門市');
-    loadUserList();
-    return;
-  }
   const { error } = await sb.from('user_store_access').insert({ user_id: userId, store_key: storeKey });
   if (error) { showToast('❌ 指派失敗'); return; }
-  showToast('✅ 已指派 ' + storeKey);
+  showToast(`✅ 已指派 ${storeKey}`);
   loadUserList();
 }
 
@@ -1694,22 +1668,9 @@ async function setUserRole(userId, role) {
 }
 
 async function grantRequestedStore(userId, storeKey) {
-  if (storeKey === '__ALL__') {
-    if (!confirm('確定一次指派所有門市給此使用者？')) return;
-    const eff = [...ALL_STORE_KEYS, ...cachedCustomStores.map(s=>s.key)];
-    const { data: ex } = await sb.from('user_store_access').select('store_key').eq('user_id', userId);
-    const ass = new Set((ex||[]).map(r=>r.store_key));
-    const toAdd = eff.filter(s=>!ass.has(s)).map(s=>({ user_id: userId, store_key: s }));
-    if (!toAdd.length) { showToast('此使用者已有所有門市權限'); return; }
-    const { error: err2 } = await sb.from('user_store_access').insert(toAdd);
-    if (err2) { showToast('❌ 批次指派失敗'); return; }
-    showToast('✅ 已指派全部 ' + toAdd.length + ' 家門市');
-    loadUserList();
-    return;
-  }
   const { error } = await sb.from('user_store_access').insert({ user_id: userId, store_key: storeKey });
   if (error) { showToast('❌ 指派失敗'); return; }
-  showToast('✅ 已指派 ' + storeKey);
+  showToast(`✅ 已指派 ${storeKey}`);
   loadUserList();
 }
 
@@ -1924,206 +1885,6 @@ async function exportAllHistoryCSV() {
 }
 
 let toastTimer;
-
-
-// ── 大榮貨運 ──────────────────────────────────
-var DAIWA_STORES = new Set(['台北車站']);
-
-function copyDaiwaMsg(input) {
-  if (!input || !input.value) { showToast('本週無台北車站訂單'); return; }
-  navigator.clipboard.writeText(input.value)
-    .then(function() { showToast('✅ 已複製大榮貨運預約文字'); })
-    .catch(function() { input.select(); document.execCommand('copy'); showToast('✅ 已複製'); });
-}
-
-// Override renderLogistics to support 大榮
-var _origRenderLogistics = renderLogistics;
-function renderLogistics() {
-  // call original but patch the active master filter
-  var origGetActive = getActiveStoreMaster;
-  // temporarily override to exclude DAIWA
-  getActiveStoreMaster = function() {
-    return origGetActive().filter(function(sm) { return !DAIWA_STORES.has(sm.key); });
-  };
-  _origRenderLogistics();
-  getActiveStoreMaster = origGetActive;
-  // now render daiwa section
-  var orderMap = {};
-  allOrders.forEach(function(o) { orderMap[o.store_key] = o; });
-  var frozenProds = PRODUCTS.filter(function(p) { return p.cat === '冷凍'; });
-  var ambientProds = PRODUCTS.filter(function(p) { return p.cat === '常温'; });
-  var all = origGetActive().filter(function(sm) { return DAIWA_STORES.has(sm.key); });
-  var daiwaTotal = 0;
-  var rows = all.map(function(sm) {
-    var o = orderMap[sm.key];
-    if (!o) return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td>'+(sm.fullName||sm.key)+'</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">'+sm.address+'</td><td style="font-size:12px">'+sm.phone+'</td></tr>';
-    var data = o.data || {};
-    var frozen = frozenProds.reduce(function(s,p){ return s+(data[p.id]&&data[p.id].order||0); }, 0);
-    var ambient = ambientProds.reduce(function(s,p){ return s+(data[p.id]&&data[p.id].order||0); }, 0);
-    var total = frozen + ambient; daiwaTotal += total;
-    return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td><strong>'+(sm.fullName||sm.key)+'</strong></td><td class="'+(frozen>0?'frozen-cell':'zero-cell')+'">'+(frozen>0?frozen:'—')+'</td><td class="'+(ambient>0?'ambient-cell':'zero-cell')+'">'+(ambient>0?ambient:'—')+'</td><td class="'+(total>0?'total-cell':'zero-cell')+'">'+(total>0?total:'—')+'</td><td style="font-size:12px;color:var(--muted)">'+sm.address+'</td><td style="font-size:12px">'+sm.phone+'</td></tr>';
-  });
-  var db = document.getElementById('daiwaBody');
-  if (db) db.innerHTML = rows.length ? rows.join('') + '<tr class="total-row"><td colspan="4" style="font-weight:800">合計</td><td class="total-cell">'+daiwaTotal+'</td><td colspan="2"></td></tr>' : '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--muted)">本週無訂單</td></tr>';
-  var di = document.getElementById('daiwaMsg');
-  if (di) { di.value = daiwaTotal > 0 ? '幫我預約，大榮貨運（台北車站-'+daiwaTotal+'箱），謝謝' : ''; di.placeholder = daiwaTotal > 0 ? '' : '（本週無台北車站訂單）'; }
-}
-
-// ── 品項編輯（完整版） ────────────────────────
-function editDefaultProduct(id) {
-  var p = PRODUCTS_DEFAULT.find(function(x){ return x.id === id; });
-  if (!p) return;
-  var existing = cachedCustomProducts.find(function(x){ return x.id === id; });
-  var cur = existing || {};
-  var curBT = cur.box_type || 'box';
-  var curCat = cur.cat || p.cat || '冷凍';
-  var curUnit = cur.unit || p.unit || '箱';
-  var old = document.getElementById('editDefaultModal');
-  if (old) old.remove();
-  var modal = document.createElement('div');
-  modal.id = 'editDefaultModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-  var unitOpts = ['箱','包','罐','個'].map(function(u){ return '<option'+(curUnit===u?' selected':'')+'>'+u+'</option>'; }).join('');
-  modal.innerHTML = '<div style="background:#fff;border-radius:12px;padding:20px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:15px;font-weight:800">✏️ 編輯預設品項</h3><button id="edClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b">✕</button></div>'
-    + '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:12px">'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項 ID</label><input value="'+p.id+'" disabled style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--muted)"></div>'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項名稱 *</label><input id="edName" value="'+(cur.name||p.name)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">縮寫（列印用）</label><input id="edShort" maxlength="5" value="'+(cur.short_name||p.short||p.name.slice(0,4))+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'
-    + '</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">分類</label><select id="edCat" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff"><option value="冷凍"'+(curCat==='冷凍'?' selected':'')+'>冷凍</option><option value="常温"'+(curCat==='常温'?' selected':'')+'>常温</option><option value="代訂"'+(curCat==='代訂'?' selected':'')+'>代訂</option></select></div>'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂貨單位</label><select id="edUnit" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff">'+unitOpts+'</select></div>'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">盤點單位</label><input id="edStock" value="'+(cur.stock_unit||p.stockUnit||p.unit)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'
-    + '</div>'
-    + '<div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">'
-    + '<div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px">📦 箱裝方式</div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">包裝類型</label><select id="edBoxType" onchange="edBoxTypeChange()" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:#fff"><option value="box"'+(curBT==='box'?' selected':'')+'>整箱訂貨（訂 1 箱 ＝ 出貨 1 箱）</option><option value="loose"'+(curBT==='loose'?' selected':'')+'>散貨拼裝（多包/罐合拼為 1 箱）</option><option value="none"'+(curBT==='none'?' selected':'')+'>不計算箱數</option></select></div>'
-    + '<div id="edLooseWrap"'+(curBT!=='loose'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">幾個/包/罐 可拼 1 箱</label><input id="edLooseQty" type="number" min="1" value="'+(cur.loose_box_qty||(LOOSE_BOX_DEFAULT[id]||10))+'" style="width:100%;padding:8px;border:1.5px solid #fdba74;border-radius:7px;font-size:14px;text-align:center;background:#fffbeb"></div>'
-    + '<div id="edPerBoxWrap"'+(curBT==='none'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">每箱個數（顯示用）</label><input id="edPerBox" type="number" min="1" value="'+(cur.per_box_default||p.perBoxDefault||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'
-    + '</div></div>'
-    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">最低訂量</label><input id="edMinQty" type="number" min="1" value="'+(cur.min_qty||p.minQty||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'
-    + '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂購倍數<span style="font-weight:400;color:#94a3b8;margin-left:4px">每次+/-幾個</span></label><input id="edStep" type="number" min="1" value="'+(cur.step||p.step||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'
-    + '</div>'
-    + '<div style="display:flex;gap:8px"><button id="edSave" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存</button><button id="edCancel" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button></div>'
-    + '</div>';
-  document.body.appendChild(modal);
-  window.edBoxTypeChange = function() {
-    var v = document.getElementById('edBoxType').value;
-    document.getElementById('edLooseWrap').style.display = v === 'loose' ? '' : 'none';
-    document.getElementById('edPerBoxWrap').style.display = v === 'none' ? 'none' : '';
-  };
-  document.getElementById('edClose').onclick = function(){ modal.remove(); };
-  document.getElementById('edCancel').onclick = function(){ modal.remove(); };
-  document.getElementById('edSave').onclick = async function() {
-    var name = document.getElementById('edName').value.trim() || p.name;
-    var shortName = document.getElementById('edShort').value.trim() || name.slice(0,4);
-    var cat = document.getElementById('edCat').value;
-    var unit = document.getElementById('edUnit').value;
-    var stock = document.getElementById('edStock').value.trim() || unit;
-    var boxType = document.getElementById('edBoxType').value;
-    var looseQty = parseInt(document.getElementById('edLooseQty').value) || 0;
-    var perBox = parseInt(document.getElementById('edPerBox').value) || 1;
-    var minQty = parseInt(document.getElementById('edMinQty').value) || 1;
-    var step = parseInt(document.getElementById('edStep').value) || 1;
-    if (!name) { showToast('❌ 品項名稱不能為空'); return; }
-    var perBoxDefault = boxType === 'loose' ? looseQty : (boxType === 'none' ? 1 : perBox);
-    var payload = { id: id, name: name, short_name: shortName, unit: unit, stock_unit: stock, cat: cat, box_type: boxType, loose_box_qty: looseQty, per_box_default: perBoxDefault, min_qty: minQty, step: step, is_active: true };
-    var error;
-    if (existing) {
-      var r1 = await sb.from('custom_products').update(payload).eq('id', id); error = r1.error;
-    } else {
-      var r2 = await sb.from('custom_products').insert(payload); error = r2.error;
-    }
-    if (error) { showToast('❌ 儲存失敗：' + error.message); return; }
-    if (existing) { var idx = cachedCustomProducts.findIndex(function(x){ return x.id===id; }); if (idx >= 0) cachedCustomProducts[idx] = Object.assign({}, cachedCustomProducts[idx], payload); }
-    else { cachedCustomProducts.push(payload); }
-    modal.remove();
-    showToast('✅ 已儲存「' + name + '」的設定');
-    rebuildProducts(); renderProductList(); renderAll();
-  };
-}
-
-// ── 帳號管理 ──────────────────────────────────
-function resetUserPassword(email, userId) {
-  if (sbAdmin && userId) { showPasswordResetModal(email, userId); return; }
-  if (!confirm('寄送密碼重設信給「' + email + '」？')) return;
-  sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0] })
-    .then(function(r) {
-      if (r.error) { showToast('❌ 發送失敗：' + r.error.message); return; }
-      showToast('✅ 已寄出重設密碼信至 ' + email);
-    });
-}
-function showPasswordResetModal(email, userId) {
-  var old = document.getElementById('pwResetModal'); if (old) old.remove();
-  var modal = document.createElement('div'); modal.id = 'pwResetModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-  modal.innerHTML = '<div style="background:#fff;border-radius:12px;padding:20px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h3 style="font-size:15px;font-weight:800">🔑 重設密碼</h3><button onclick="document.getElementById('pwResetModal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b">✕</button></div>'
-    + '<div style="font-size:12px;color:var(--muted);background:#f8fafc;border-radius:7px;padding:8px 10px;margin-bottom:14px">' + email + '</div>'
-    + '<div style="margin-bottom:14px"><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px">管理員直接設定新密碼</label>'
-    + '<div style="display:flex;gap:8px"><input id="pwNewVal" type="text" placeholder="輸入新密碼（至少 8 碼）" style="flex:1;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">'
-    + '<button onclick="adminSetPassword('' + userId + '','' + email + '')" style="background:var(--primary);color:#fff;border:none;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">設定</button></div></div>'
-    + '<div style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:14px">── 或 ──</div>'
-    + '<button onclick="sendResetEmail('' + email + '')" style="width:100%;background:#f1f5f9;color:var(--text);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">📧 寄出密碼重設信</button>'
-    + '</div>';
-  document.body.appendChild(modal);
-}
-async function adminSetPassword(userId, email) {
-  var pw = document.getElementById('pwNewVal').value.trim();
-  if (!pw || pw.length < 8) { showToast('❌ 密碼至少 8 個字元'); return; }
-  var r = await sbAdmin.auth.admin.updateUserById(userId, { password: pw });
-  if (r.error) { showToast('❌ 設定失敗：' + r.error.message); return; }
-  var m = document.getElementById('pwResetModal'); if (m) m.remove();
-  showToast('✅ 已為 ' + email + ' 設定新密碼');
-}
-function sendResetEmail(email) {
-  sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0] })
-    .then(function(r) {
-      var m = document.getElementById('pwResetModal'); if (m) m.remove();
-      if (r.error) { showToast('❌ 發送失敗：' + r.error.message); return; }
-      showToast('✅ 已寄出重設密碼信至 ' + email);
-    });
-}
-async function deleteUser(userId, email) {
-  if (!confirm('確定完整刪除「' + email + '」的帳號？\n\n刪除後對方可用同 Email 重新申請。')) return;
-  await sb.from('user_store_access').delete().eq('user_id', userId);
-  await sb.from('user_profiles').delete().eq('id', userId);
-  if (sbAdmin) {
-    var r = await sbAdmin.auth.admin.deleteUser(userId);
-    showToast(r.error ? '⚠️ 資料已刪，Auth 刪除失敗：' + r.error.message : '✅ 已完整刪除「' + email + '」');
-  } else {
-    showToast('✅ 資料已刪除');
-    setTimeout(function() {
-      if (confirm('還需到 Supabase Dashboard 手動刪除「' + email + '」的認證記錄，對方才能重新申請。\n\n是否立即開啟？'))
-        window.open('https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users', '_blank');
-    }, 300);
-  }
-  loadUserList();
-}
-
-// ── Service Key UI ────────────────────────────
-function saveServiceKey() {
-  var val = document.getElementById('serviceKeyInput').value.trim();
-  if (!val) { showToast('❌ 請輸入 key'); return; }
-  try { localStorage.setItem('sb_service_key', val); } catch(e) {}
-  try {
-    sbAdmin = window.supabase.createClient(SUPABASE_URL, val, { auth: { autoRefreshToken: false, persistSession: false } });
-    var el = document.getElementById('serviceKeyStatus');
-    if (el) el.innerHTML = '<span style="color:var(--green);font-weight:700">✅ 已儲存並啟用</span>';
-    showToast('✅ Service key 已儲存，進階功能已啟用');
-  } catch(e) { showToast('❌ key 格式錯誤'); }
-}
-function clearServiceKey() {
-  try { localStorage.removeItem('sb_service_key'); } catch(e) {}
-  sbAdmin = null;
-  var inp = document.getElementById('serviceKeyInput'); if (inp) inp.value = '';
-  var el = document.getElementById('serviceKeyStatus'); if (el) el.innerHTML = '<span style="color:var(--orange)">已清除</span>';
-  showToast('Service key 已清除');
-}
-
 function showToast(msg) {
   clearTimeout(toastTimer);
   let t=document.getElementById('toast');
@@ -2134,5 +1895,148 @@ function showToast(msg) {
 
 init();
 </script>
+
+<script>
+// ═══ EXTENSION SCRIPT ═══ (safe to remove if issues arise)
+
+// Service role key (stored in browser only, never on GitHub)
+var SUPABASE_SERVICE_KEY_EXT = (function(){ try{ return localStorage.getItem('sb_service_key')||''; }catch(e){ return ''; } }());
+var sbAdmin = null;
+
+// Init sbAdmin after page loads
+document.addEventListener('DOMContentLoaded', function() {
+  if (SUPABASE_SERVICE_KEY_EXT && window.supabase) {
+    try {
+      sbAdmin = window.supabase.createClient(
+        'https://jpabzycaqybbvebwewrt.supabase.co',
+        SUPABASE_SERVICE_KEY_EXT,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+      );
+    } catch(e) { console.warn('sbAdmin init failed:', e); }
+  }
+});
+
+// ── 大榮貨運 ──────────────────────────────
+var DAIWA_STORES = ['台北車站'];
+
+function copyDaiwaMsg(input) {
+  if (!input || !input.value) { if(typeof showToast!=='undefined') showToast('本週無台北車站訂單'); return; }
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(input.value).then(function(){ if(typeof showToast!=='undefined') showToast('✅ 已複製大榮貨運預約文字'); });
+  } else {
+    input.select(); document.execCommand('copy');
+    if(typeof showToast!=='undefined') showToast('✅ 已複製');
+  }
+}
+
+function renderDaiwaSection() {
+  if (typeof allOrders === 'undefined' || typeof PRODUCTS === 'undefined') return;
+  var orderMap = {};
+  allOrders.forEach(function(o){ orderMap[o.store_key] = o; });
+  var frozenProds = PRODUCTS.filter(function(p){ return p.cat === '冷凍'; });
+  var ambientProds = PRODUCTS.filter(function(p){ return p.cat === '常温'; });
+  var allStores = typeof getActiveStoreMaster === 'function' ? getActiveStoreMaster() : [];
+  var daiwaStores = allStores.filter(function(sm){ return DAIWA_STORES.indexOf(sm.key) >= 0; });
+  var daiwaTotal = 0;
+  var rows = daiwaStores.map(function(sm) {
+    var o = orderMap[sm.key];
+    if (!o) return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td>'+(sm.fullName||sm.key)+'</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">'+sm.address+'</td><td style="font-size:12px">'+sm.phone+'</td></tr>';
+    var data = o.data || {};
+    var frozen = frozenProds.reduce(function(s,p){ return s+((data[p.id]&&data[p.id].order)||0); }, 0);
+    var ambient = ambientProds.reduce(function(s,p){ return s+((data[p.id]&&data[p.id].order)||0); }, 0);
+    var total = frozen + ambient; daiwaTotal += total;
+    return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td><strong>'+(sm.fullName||sm.key)+'</strong></td>'
+      +'<td class="'+(frozen>0?'frozen-cell':'zero-cell')+'">'+(frozen||'—')+'</td>'
+      +'<td class="'+(ambient>0?'ambient-cell':'zero-cell')+'">'+(ambient||'—')+'</td>'
+      +'<td class="'+(total>0?'total-cell':'zero-cell')+'">'+(total||'—')+'</td>'
+      +'<td style="font-size:12px;color:var(--muted)">'+sm.address+'</td><td style="font-size:12px">'+sm.phone+'</td></tr>';
+  });
+  var db = document.getElementById('daiwaBody');
+  if (db) db.innerHTML = rows.length
+    ? rows.join('')+'<tr class="total-row"><td colspan="4" style="font-weight:800">合計</td><td class="total-cell">'+daiwaTotal+'</td><td colspan="2"></td></tr>'
+    : '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--muted)">本週無訂單</td></tr>';
+  var di = document.getElementById('daiwaMsg');
+  if (di) { di.value = daiwaTotal>0 ? '幫我預約，大榮貨運（台北車站-'+daiwaTotal+'箱），謝謝' : ''; di.placeholder = daiwaTotal>0 ? '' : '（本週無台北車站訂單）'; }
+}
+
+// Patch renderAll to also render Daiwa section
+if (typeof renderAll !== 'undefined') {
+  var _origRenderAll = renderAll;
+  renderAll = function() { _origRenderAll.apply(this, arguments); renderDaiwaSection(); };
+}
+// Also patch renderLogistics to exclude 台北車站 from main table
+if (typeof renderLogistics !== 'undefined') {
+  var _origRenderLogistics = renderLogistics;
+  renderLogistics = function() {
+    var origFn = getActiveStoreMaster;
+    getActiveStoreMaster = function(){ return origFn().filter(function(sm){ return DAIWA_STORES.indexOf(sm.key)<0; }); };
+    _origRenderLogistics();
+    getActiveStoreMaster = origFn;
+    renderDaiwaSection();
+  };
+}
+
+// ── Service Key functions ──────────────────────────
+function saveServiceKey() {
+  var inp = document.getElementById('serviceKeyInput');
+  var val = inp ? inp.value.trim() : '';
+  if (!val) { if(typeof showToast!=='undefined') showToast('❌ 請輸入 key'); return; }
+  try { localStorage.setItem('sb_service_key', val); } catch(e) {}
+  try {
+    sbAdmin = window.supabase.createClient(
+      'https://jpabzycaqybbvebwewrt.supabase.co', val,
+      { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+    var el = document.getElementById('serviceKeyStatus');
+    if (el) el.innerHTML = '<span style="color:var(--green);font-weight:700">✅ 已儲存並啟用</span>';
+    if(typeof showToast!=='undefined') showToast('✅ 進階功能已啟用');
+  } catch(e) { if(typeof showToast!=='undefined') showToast('❌ key 格式錯誤'); }
+}
+function clearServiceKey() {
+  try { localStorage.removeItem('sb_service_key'); } catch(e) {}
+  sbAdmin = null;
+  var inp = document.getElementById('serviceKeyInput'); if (inp) inp.value = '';
+  var el = document.getElementById('serviceKeyStatus'); if (el) el.innerHTML = '<span style="color:var(--orange)">已清除</span>';
+  if(typeof showToast!=='undefined') showToast('Service key 已清除');
+}
+
+// ── Patch switchTab to show service key status ──
+if (typeof switchTab !== 'undefined') {
+  var _origSwitchTab = switchTab;
+  switchTab = function(n) {
+    _origSwitchTab(n);
+    if (n === 8) {
+      try {
+        var sk = localStorage.getItem('sb_service_key');
+        var inp = document.getElementById('serviceKeyInput');
+        if (inp && sk) { inp.value = sk; var st = document.getElementById('serviceKeyStatus'); if(st) st.innerHTML = '<span style="color:var(--green);font-weight:700">✅ Service key 已設定</span>'; }
+      } catch(e) {}
+    }
+  };
+}
+
+// ── 全門市指派 ──────────────────────────────────
+// Patch grantStore to support __ALL__
+if (typeof grantStore !== 'undefined') {
+  var _origGrantStore = grantStore;
+  grantStore = async function(userId) {
+    var sel = document.getElementById('grant_' + userId);
+    if (!sel || sel.value !== '__ALL__') { return _origGrantStore(userId); }
+    if (!confirm('確定一次指派所有門市給此使用者？')) return;
+    var eff = (typeof ALL_STORE_KEYS !== 'undefined' ? ALL_STORE_KEYS : [])
+      .concat((typeof cachedCustomStores !== 'undefined' ? cachedCustomStores : []).map(function(s){ return s.key; }));
+    var r = await (typeof sb !== 'undefined' ? sb : window._sb).from('user_store_access').select('store_key').eq('user_id', userId);
+    var ass = new Set((r.data||[]).map(function(x){ return x.store_key; }));
+    var toAdd = eff.filter(function(s){ return !ass.has(s); }).map(function(s){ return { user_id: userId, store_key: s }; });
+    if (!toAdd.length) { if(typeof showToast!=='undefined') showToast('此使用者已有所有門市權限'); return; }
+    var r2 = await (typeof sb !== 'undefined' ? sb : window._sb).from('user_store_access').insert(toAdd);
+    if (r2.error) { if(typeof showToast!=='undefined') showToast('❌ 批次指派失敗'); return; }
+    if(typeof showToast!=='undefined') showToast('✅ 已指派全部 ' + toAdd.length + ' 家門市');
+    if(typeof loadUserList!=='undefined') loadUserList();
+  };
+}
+
+</script>
+
 </body>
 </html>
