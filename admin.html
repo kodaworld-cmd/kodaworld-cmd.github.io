@@ -1614,7 +1614,7 @@ async function loadUserList() {
       </td>
       <td style="text-align:center">
         ${isSuperAdmin ? `
-          <button onclick="resetUserPassword('${p.email}')" class="btn btn-sm" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;margin-bottom:3px">📧 重設密碼</button>
+          <button onclick="resetUserPassword('${p.email}','${p.id}')" class="btn btn-sm" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;margin-bottom:3px">🔑 重設密碼</button>
           <button onclick="suspendUser('${p.id}','${p.email}')" class="btn btn-sm" style="background:#fff7ed;color:var(--orange);border:1px solid #fdba74;margin-bottom:3px">⏸ 停用</button>
           <button onclick="deleteUser('${p.id}','${p.email}')" class="btn btn-sm" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5">🗑 刪除</button>
         ` : ''}
@@ -1627,6 +1627,18 @@ async function grantStore(userId) {
   const sel = document.getElementById(`grant_${userId}`);
   const storeKey = sel.value;
   if (!storeKey) return;
+  if (storeKey === '__ALL__') {
+    if (!confirm('確定一次指派所有門市給此使用者？')) return;
+    const eff = [...ALL_STORE_KEYS, ...cachedCustomStores.map(s=>s.key)];
+    const { data: ex } = await sb.from('user_store_access').select('store_key').eq('user_id', userId);
+    const has = new Set((ex||[]).map(r=>r.store_key));
+    const toAdd = eff.filter(s=>!has.has(s)).map(s=>({ user_id: userId, store_key: s }));
+    if (!toAdd.length) { showToast('此使用者已有所有門市權限'); return; }
+    const { error } = await sb.from('user_store_access').insert(toAdd);
+    if (error) { showToast('❌ 批次指派失敗：' + error.message); return; }
+    showToast(`✅ 已指派全部 ${toAdd.length} 家門市`);
+    loadUserList(); return;
+  }
   const { error } = await sb.from('user_store_access').insert({ user_id: userId, store_key: storeKey });
   if (error) { showToast('❌ 指派失敗'); return; }
   showToast(`✅ 已指派 ${storeKey}`);
@@ -1657,20 +1669,42 @@ async function grantRequestedStore(userId, storeKey) {
 }
 
 
-async function resetUserPassword(email) {
+async function resetUserPassword(email, userId) {
+  if (window.sbAdmin && userId) {
+    // admin can set password directly
+    const newPw = window.prompt(`直接設定「${email}」的新密碼（至少 8 碼），或取消改寄重設信：`);
+    if (newPw === null) {
+      // cancelled → send email instead
+    } else if (newPw.length < 8) {
+      showToast('❌ 密碼至少 8 個字元'); return;
+    } else {
+      const { error } = await window.sbAdmin.auth.admin.updateUserById(userId, { password: newPw });
+      if (error) { showToast('❌ 設定失敗：' + error.message); return; }
+      showToast(`✅ 已為 ${email} 設定新密碼`); return;
+    }
+  }
   if (!confirm(`寄送密碼重設信給「${email}」？`)) return;
   const { error } = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + '/order.html'
+    redirectTo: window.location.href.split('#')[0]
   });
   if (error) { showToast('❌ 發送失敗：' + error.message); return; }
   showToast(`✅ 已寄出重設密碼信至 ${email}`);
 }
 
 async function deleteUser(userId, email) {
-  if (!confirm(`確定刪除「${email}」的帳號資料？\n（Supabase 的認證帳號請至 Supabase Dashboard 手動刪除）`)) return;
+  if (!confirm(`確定完整刪除「${email}」的帳號？\n\n刪除後對方可用同 Email 重新申請。`)) return;
   await sb.from('user_store_access').delete().eq('user_id', userId);
   await sb.from('user_profiles').delete().eq('id', userId);
-  showToast(`✅ 已刪除 ${email} 的資料`);
+  if (window.sbAdmin) {
+    const { error } = await window.sbAdmin.auth.admin.deleteUser(userId);
+    showToast(error ? `⚠️ 資料已刪，Auth 刪除失敗：${error.message}` : `✅ 已完整刪除「${email}」`);
+  } else {
+    showToast(`✅ 資料已刪除`);
+    setTimeout(() => {
+      if (confirm(`還需到 Supabase Dashboard 手動刪除「${email}」的認證記錄，對方才能重新申請。\n\n是否立即開啟？`))
+        window.open('https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users', '_blank');
+    }, 300);
+  }
   loadUserList();
 }
 
@@ -1885,32 +1919,27 @@ init();
   try { SK = localStorage.getItem('sb_service_key') || ''; } catch(e) {}
   function initSbAdmin(key) {
     if (!key || !window.supabase) return;
-    try { window.sbAdmin = window.supabase.createClient('https://jpabzycaqybbvebwewrt.supabase.co', key, { auth: { autoRefreshToken: false, persistSession: false } }); } catch(e) { console.warn('sbAdmin:', e); }
+    try { window.sbAdmin = window.supabase.createClient('https://jpabzycaqybbvebwewrt.supabase.co', key, { auth: { autoRefreshToken: false, persistSession: false } }); } catch(e) {}
   }
   if (SK) initSbAdmin(SK);
 
   window.saveServiceKey = function() {
     var inp = document.getElementById('serviceKeyInput');
     var val = inp ? inp.value.trim() : '';
-    if (!val) { showToast('Please enter key'); return; }
+    if (!val) { showToast('請輸入 key'); return; }
     try { localStorage.setItem('sb_service_key', val); } catch(e) {}
     initSbAdmin(val);
     var st = document.getElementById('serviceKeyStatus');
-    if (st) st.innerHTML = '<span style="color:var(--green);font-weight:700">OK - saved</span>';
-    showToast('Service key saved');
+    if (st) st.innerHTML = '<span style="color:var(--green);font-weight:700">✅ 已儲存並啟用</span>';
+    showToast('✅ Service key 已儲存，進階功能已啟用');
   };
   window.clearServiceKey = function() {
     try { localStorage.removeItem('sb_service_key'); } catch(e) {}
     window.sbAdmin = null;
     var inp = document.getElementById('serviceKeyInput'); if (inp) inp.value = '';
-    var st = document.getElementById('serviceKeyStatus'); if (st) st.innerHTML = 'Cleared';
-    showToast('Service key cleared');
+    var st = document.getElementById('serviceKeyStatus'); if (st) st.innerHTML = '<span style="color:var(--orange)">已清除</span>';
+    showToast('Service key 已清除');
   };
-
-  function waitFor(name, cb) {
-    if (typeof window[name] !== 'undefined') { cb(); return; }
-    var t = setInterval(function() { if (typeof window[name] !== 'undefined') { clearInterval(t); cb(); } }, 150);
-  }
 
   document.addEventListener('DOMContentLoaded', function() {
     var sb_btn = document.getElementById('saveSkBtn'); if (sb_btn) sb_btn.onclick = window.saveServiceKey;
@@ -1918,9 +1947,9 @@ init();
     var cp_btn = document.getElementById('daiwaCopyBtn');
     if (cp_btn) cp_btn.onclick = function() {
       var el = document.getElementById('daiwaMsg');
-      if (!el || !el.value) { showToast('No Daiwa order this week'); return; }
-      if (navigator.clipboard) { navigator.clipboard.writeText(el.value).then(function(){ showToast('Copied'); }); }
-      else { el.select(); document.execCommand('copy'); showToast('Copied'); }
+      if (!el || !el.value) { showToast('本週無台北車站訂單'); return; }
+      if (navigator.clipboard) { navigator.clipboard.writeText(el.value).then(function(){ showToast('✅ 已複製大榮貨運預約文字'); }); }
+      else { el.select(); document.execCommand('copy'); showToast('✅ 已複製'); }
     };
   });
 
@@ -1945,164 +1974,98 @@ init();
         +'<td>'+sm.address+'</td><td>'+sm.phone+'</td></tr>';
     });
     var db = document.getElementById('daiwaBody');
-    if (db) db.innerHTML = rows.length ? rows.join('')+'<tr class="total-row"><td colspan="4" style="font-weight:800">Total</td><td class="total-cell">'+tot+'</td><td colspan="2"></td></tr>' : '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--muted)">No orders this week</td></tr>';
+    if (db) db.innerHTML = rows.length ? rows.join('')+'<tr class="total-row"><td colspan="4" style="font-weight:800">合計</td><td class="total-cell">'+tot+'</td><td colspan="2"></td></tr>' : '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--muted)">本週無訂單</td></tr>';
     var dm = document.getElementById('daiwaMsg');
-    if (dm) { dm.value = tot>0 ? '幫我預約，大榮貨運（台北車站-'+tot+'筱），謝謝' : ''; dm.placeholder = tot>0?'':'（本週無台北車站訂單）'; }
+    if (dm) { dm.value = tot>0 ? '幫我預約，大榮貨運（台北車站-'+tot+'箱），謝謝' : ''; dm.placeholder = tot>0?'':'（本週無台北車站訂單）'; }
   };
 
-  waitFor('renderAll', function() {
-    var _o = window.renderAll;
-    window.renderAll = function() { _o.apply(this, arguments); window.renderDaiwaSection(); };
-  });
+  var _origRenderAll = window.renderAll;
+  if (typeof _origRenderAll === 'function') {
+    window.renderAll = function() { _origRenderAll.apply(this, arguments); window.renderDaiwaSection(); };
+  }
 
-  waitFor('switchTab', function() {
-    var _o = window.switchTab;
+  var _origSwitchTab = window.switchTab;
+  if (typeof _origSwitchTab === 'function') {
     window.switchTab = function(n) {
-      _o(n);
+      _origSwitchTab(n);
       if (n===3) setTimeout(window.renderDaiwaSection, 100);
-      if (n===8) { try { var sk=localStorage.getItem('sb_service_key'); var inp=document.getElementById('serviceKeyInput'); if(inp&&sk){inp.value=sk; var st=document.getElementById('serviceKeyStatus'); if(st) st.innerHTML='<span style="color:var(--green);font-weight:700">Service key set</span>';} } catch(e){} }
-    };
-  });
-
-  waitFor('grantStore', function() {
-    var _o = window.grantStore;
-    window.grantStore = async function(userId) {
-      var sel = document.getElementById('grant_'+userId);
-      if (!sel || sel.value !== '__ALL__') { return _o(userId); }
-      if (!confirm('Assign ALL stores to this user?')) return;
-      var eff = (window.ALL_STORE_KEYS||[]).concat((window.cachedCustomStores||[]).map(function(s){ return s.key; }));
-      var r = await sb.from('user_store_access').select('store_key').eq('user_id',userId);
-      var has = new Set((r.data||[]).map(function(x){ return x.store_key; }));
-      var add = eff.filter(function(s){ return !has.has(s); }).map(function(s){ return {user_id:userId,store_key:s}; });
-      if (!add.length) { showToast('User already has all stores'); return; }
-      var r2 = await sb.from('user_store_access').insert(add);
-      if (r2.error) { showToast('Failed: '+r2.error.message); return; }
-      showToast('Assigned '+add.length+' stores');
-      loadUserList();
-    };
-  });
-
-  waitFor('deleteUser', function() {
-    window.deleteUser = async function(userId, email) {
-      if (!confirm('Delete account for '+email+'?\n\nThey can re-register with same email after.')) return;
-      await sb.from('user_store_access').delete().eq('user_id',userId);
-      await sb.from('user_profiles').delete().eq('id',userId);
-      if (window.sbAdmin) {
-        var r = await window.sbAdmin.auth.admin.deleteUser(userId);
-        showToast(r.error ? 'Data deleted, Auth delete failed: '+r.error.message : 'Account fully deleted');
-      } else {
-        showToast('Data deleted. Please remove auth record from Supabase Dashboard.');
-        setTimeout(function(){ if(confirm('Open Supabase Dashboard to delete auth record?')) window.open('https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users','_blank'); },300);
+      if (n===8) {
+        try {
+          var sk = localStorage.getItem('sb_service_key');
+          var inp = document.getElementById('serviceKeyInput');
+          if (inp && sk) { inp.value = sk; var st = document.getElementById('serviceKeyStatus'); if(st) st.innerHTML = '<span style="color:var(--green);font-weight:700">✅ Service key 已設定</span>'; }
+        } catch(e) {}
       }
-      loadUserList();
     };
-  });
+  }
 
-  waitFor('resetUserPassword', function() {
-    window.resetUserPassword = function(email, userId) {
-      if (window.sbAdmin && userId) { showPwModal(email, userId); return; }
-      if (!confirm('Send password reset email to '+email+'?')) return;
-      sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0] }).then(function(r){ showToast(r.error ? 'Failed: '+r.error.message : 'Reset email sent to '+email); });
-    };
-  });
-
-  window.showPwModal = function(email, userId) {
-    var old = document.getElementById('pwModal'); if(old) old.remove();
-    var m = document.createElement('div'); m.id='pwModal';
+  window.editDefaultProduct = function(id) {
+    var p = window.PRODUCTS_DEFAULT.find(function(x){ return x.id===id; });
+    if (!p) return;
+    var cur = (window.cachedCustomProducts||[]).find(function(x){ return x.id===id; }) || {};
+    var bt=cur.box_type||'box', cat=cur.cat||p.cat||'冷凍', unit=cur.unit||p.unit||'箱';
+    var old=document.getElementById('edModal'); if(old) old.remove();
+    var m=document.createElement('div'); m.id='edModal';
     m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-    m.innerHTML='<div style="background:#fff;border-radius:12px;padding:20px;max-width:400px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:12px"><h3 style="font-size:15px;font-weight:800">Reset Password</h3><button id="pw_close" style="background:none;border:none;font-size:20px;cursor:pointer">x</button></div>'
-      +'<div style="font-size:12px;background:#f8fafc;border-radius:7px;padding:8px;margin-bottom:12px">'+email+'</div>'
-      +'<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;display:block;margin-bottom:4px">Set new password directly (admin)</label>'
-      +'<div style="display:flex;gap:8px"><input id="pwVal" type="text" placeholder="Min 8 chars" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">'
-      +'<button id="pw_set" style="background:var(--primary);color:#fff;border:none;border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer">Set</button></div></div>'
-      +'<div style="text-align:center;font-size:11px;color:#94a3b8;margin-bottom:12px">- or -</div>'
-      +'<button id="pw_email" style="width:100%;background:#f1f5f9;color:var(--text);border:1.5px solid var(--border);border-radius:8px;padding:10px;font-size:13px;font-weight:700;cursor:pointer">Send reset email</button>'
+    var uOpts=['箱','包','罐','個'].map(function(u){ return '<option'+(unit===u?' selected':'')+'>'+u+'</option>'; }).join('');
+    var lbDef = (typeof LOOSE_BOX_DEFAULT!=='undefined'&&LOOSE_BOX_DEFAULT[id]) || 10;
+    m.innerHTML='<div style="background:#fff;border-radius:12px;padding:20px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:15px;font-weight:800">✏️ 編輯預設品項</h3><button id="ed_x" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button></div>'
+      +'<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:12px">'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項 ID</label><input value="'+p.id+'" disabled style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--muted)"></div>'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項名稱 *</label><input id="ed_n" value="'+(cur.name||p.name)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">縮寫（列印用）</label><input id="ed_s" maxlength="5" value="'+(cur.short_name||p.short||p.name.slice(0,4))+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">分類</label><select id="ed_c" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff"><option value="冷凍"'+(cat==='冷凍'?' selected':'')+'>冷凍</option><option value="常温"'+(cat==='常温'?' selected':'')+'>常温</option><option value="代訂"'+(cat==='代訂'?' selected':'')+'>代訂</option></select></div>'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂貨單位</label><select id="ed_u" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff">'+uOpts+'</select></div>'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">盤點單位</label><input id="ed_st" value="'+(cur.stock_unit||p.stockUnit||p.unit)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div></div>'
+      +'<div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">'
+      +'<div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px">📦 箱裝方式</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">包裝類型</label><select id="ed_bt" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:#fff"><option value="box"'+(bt==='box'?' selected':'')+'>整箱訂貨（訂 1 箱 ＝ 出貨 1 箱）</option><option value="loose"'+(bt==='loose'?' selected':'')+'>散貨拼裝（多包/罐合拼為 1 箱）</option><option value="none"'+(bt==='none'?' selected':'')+'>不計算箱數</option></select></div>'
+      +'<div id="ed_lw"'+(bt!=='loose'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">幾個/包/罐 可拼 1 箱</label><input id="ed_l" type="number" min="1" value="'+(cur.loose_box_qty||lbDef)+'" style="width:100%;padding:8px;border:1.5px solid #fdba74;border-radius:7px;font-size:14px;text-align:center;background:#fffbeb"></div>'
+      +'<div id="ed_pw"'+(bt==='none'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">每箱個數（顯示用）</label><input id="ed_p" type="number" min="1" value="'+(cur.per_box_default||p.perBoxDefault||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'
+      +'</div></div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">最低訂量</label><input id="ed_m" type="number" min="1" value="'+(cur.min_qty||p.minQty||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'
+      +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂購倍數（每次+/-幾個）</label><input id="ed_sp" type="number" min="1" value="'+(cur.step||p.step||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div></div>'
+      +'<div style="display:flex;gap:8px"><button id="ed_sv" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存</button><button id="ed_cl" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button></div>'
       +'</div>';
     document.body.appendChild(m);
-    document.getElementById('pw_close').onclick = function(){ m.remove(); };
-    document.getElementById('pw_set').onclick = async function() {
-      var pw = document.getElementById('pwVal').value;
-      if (!pw||pw.length<8) { showToast('Min 8 chars'); return; }
-      var r = await window.sbAdmin.auth.admin.updateUserById(userId,{password:pw});
-      if(r.error){showToast('Failed: '+r.error.message);return;}
-      m.remove(); showToast('Password set for '+email);
+    var existing = (window.cachedCustomProducts||[]).find(function(x){ return x.id===id; });
+    document.getElementById('ed_x').onclick = function(){ m.remove(); };
+    document.getElementById('ed_cl').onclick = function(){ m.remove(); };
+    document.getElementById('ed_bt').onchange = function() {
+      var v=this.value;
+      document.getElementById('ed_lw').style.display=v==='loose'?'':'none';
+      document.getElementById('ed_pw').style.display=v==='none'?'none':'';
     };
-    document.getElementById('pw_email').onclick = function() {
-      sb.auth.resetPasswordForEmail(email,{redirectTo:window.location.href.split('#')[0]}).then(function(r){ m.remove(); showToast(r.error?'Failed':'Reset email sent'); });
+    document.getElementById('ed_sv').onclick = async function() {
+      var name=document.getElementById('ed_n').value.trim()||p.name;
+      var sn=document.getElementById('ed_s').value.trim()||name.slice(0,4);
+      var cat2=document.getElementById('ed_c').value;
+      var u=document.getElementById('ed_u').value;
+      var st=document.getElementById('ed_st').value.trim()||u;
+      var bt2=document.getElementById('ed_bt').value;
+      var lq=parseInt(document.getElementById('ed_l').value)||0;
+      var pb=parseInt(document.getElementById('ed_p').value)||1;
+      var mn=parseInt(document.getElementById('ed_m').value)||1;
+      var sp=parseInt(document.getElementById('ed_sp').value)||1;
+      if(!name){showToast('品項名稱不能為空');return;}
+      var pbd=bt2==='loose'?lq:(bt2==='none'?1:pb);
+      var payload={id:id,name:name,short_name:sn,unit:u,stock_unit:st,cat:cat2,box_type:bt2,loose_box_qty:lq,per_box_default:pbd,min_qty:mn,step:sp,is_active:true};
+      var err;
+      if(existing){var r=await sb.from('custom_products').update(payload).eq('id',id);err=r.error;}
+      else{var r2=await sb.from('custom_products').insert(payload);err=r2.error;}
+      if(err){showToast('儲存失敗：'+err.message);return;}
+      if(existing){var idx=window.cachedCustomProducts.findIndex(function(x){return x.id===id;});if(idx>=0)window.cachedCustomProducts[idx]=Object.assign({},window.cachedCustomProducts[idx],payload);}
+      else{window.cachedCustomProducts.push(payload);}
+      m.remove(); showToast('已儲存「'+name+'」');
+      if(typeof rebuildProducts==='function')rebuildProducts();
+      if(typeof renderProductList==='function')renderProductList();
+      if(typeof renderAll==='function')renderAll();
     };
   };
-
-  waitFor('PRODUCTS_DEFAULT', function() {
-    window.editDefaultProduct = function(id) {
-      var p = window.PRODUCTS_DEFAULT.find(function(x){ return x.id===id; });
-      if (!p) return;
-      var cur = (window.cachedCustomProducts||[]).find(function(x){ return x.id===id; }) || {};
-      var bt=cur.box_type||'box', cat=cur.cat||p.cat||'冷凍', unit=cur.unit||p.unit||'箱';
-      var old=document.getElementById('edModal'); if(old) old.remove();
-      var m=document.createElement('div'); m.id='edModal';
-      m.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-      var uOpts=['箱','包','罐','個'].map(function(u){ return '<option'+(unit===u?' selected':'')+'>'+u+'</option>'; }).join('');
-      var lbDefault = (typeof LOOSE_BOX_DEFAULT!=='undefined'&&LOOSE_BOX_DEFAULT[id]) || 10;
-      m.innerHTML='<div style="background:#fff;border-radius:12px;padding:20px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:15px;font-weight:800">Edit Item</h3><button id="ed_x" style="background:none;border:none;font-size:20px;cursor:pointer">x</button></div>'
-        +'<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:12px">'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">ID</label><input value="'+p.id+'" disabled style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--muted)"></div>'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Name *</label><input id="ed_n" value="'+(cur.name||p.name)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Short</label><input id="ed_s" maxlength="5" value="'+(cur.short_name||p.short||p.name.slice(0,4))+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div></div>'
-        +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Category</label><select id="ed_c" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff"><option value="冷凍"'+(cat==='冷凍'?' selected':'')+'>冷凍</option><option value="常温"'+(cat==='常温'?' selected':'')+'>常温</option><option value="代訂"'+(cat==='代訂'?' selected':'')+'>代訂</option></select></div>'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Order Unit</label><select id="ed_u" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff">'+uOpts+'</select></div>'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Stock Unit</label><input id="ed_st" value="'+(cur.stock_unit||p.stockUnit||p.unit)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div></div>'
-        +'<div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:12px;margin-bottom:12px">'
-        +'<div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px">Box Type</div>'
-        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'
-        +'<div><select id="ed_bt" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:#fff"><option value="box"'+(bt==='box'?' selected':'')+'>Whole box</option><option value="loose"'+(bt==='loose'?' selected':'')+'>Loose pack</option><option value="none"'+(bt==='none'?' selected':'')+'>No box count</option></select></div>'
-        +'<div id="ed_lw"'+(bt!=='loose'?' style="display:none"':'')+' ><input id="ed_l" type="number" min="1" value="'+(cur.loose_box_qty||lbDefault)+'" placeholder="units per box" style="width:100%;padding:8px;border:1.5px solid #fdba74;border-radius:7px;font-size:14px;text-align:center;background:#fffbeb"></div>'
-        +'<div id="ed_pw"'+(bt==='none'?' style="display:none"':'')+' ><input id="ed_p" type="number" min="1" value="'+(cur.per_box_default||p.perBoxDefault||1)+'" placeholder="per box" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'
-        +'</div></div>'
-        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Min Qty</label><input id="ed_m" type="number" min="1" value="'+(cur.min_qty||p.minQty||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'
-        +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">Step</label><input id="ed_sp" type="number" min="1" value="'+(cur.step||p.step||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div></div>'
-        +'<div style="display:flex;gap:8px"><button id="ed_sv" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">Save</button><button id="ed_cl" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">Cancel</button></div>'
-        +'</div>';
-      document.body.appendChild(m);
-      var existing = (window.cachedCustomProducts||[]).find(function(x){ return x.id===id; });
-      document.getElementById('ed_x').onclick = function(){ m.remove(); };
-      document.getElementById('ed_cl').onclick = function(){ m.remove(); };
-      document.getElementById('ed_bt').onchange = function() {
-        var v=this.value;
-        document.getElementById('ed_lw').style.display=v==='loose'?'':'none';
-        document.getElementById('ed_pw').style.display=v==='none'?'none':'';
-      };
-      document.getElementById('ed_sv').onclick = async function() {
-        var name=document.getElementById('ed_n').value.trim()||p.name;
-        var sn=document.getElementById('ed_s').value.trim()||name.slice(0,4);
-        var cat2=document.getElementById('ed_c').value;
-        var u=document.getElementById('ed_u').value;
-        var st=document.getElementById('ed_st').value.trim()||u;
-        var bt2=document.getElementById('ed_bt').value;
-        var lq=parseInt(document.getElementById('ed_l').value)||0;
-        var pb=parseInt(document.getElementById('ed_p').value)||1;
-        var mn=parseInt(document.getElementById('ed_m').value)||1;
-        var sp=parseInt(document.getElementById('ed_sp').value)||1;
-        if(!name){showToast('Name required');return;}
-        var pbd=bt2==='loose'?lq:(bt2==='none'?1:pb);
-        var payload={id:id,name:name,short_name:sn,unit:u,stock_unit:st,cat:cat2,box_type:bt2,loose_box_qty:lq,per_box_default:pbd,min_qty:mn,step:sp,is_active:true};
-        var err;
-        if(existing){var r=await sb.from('custom_products').update(payload).eq('id',id);err=r.error;}
-        else{var r2=await sb.from('custom_products').insert(payload);err=r2.error;}
-        if(err){showToast('Save failed: '+err.message);return;}
-        if(existing){var idx=window.cachedCustomProducts.findIndex(function(x){return x.id===id;});if(idx>=0)window.cachedCustomProducts[idx]=Object.assign({},window.cachedCustomProducts[idx],payload);}
-        else{window.cachedCustomProducts.push(payload);}
-        m.remove(); showToast('Saved: '+name);
-        if(typeof rebuildProducts==='function')rebuildProducts();
-        if(typeof renderProductList==='function')renderProductList();
-        if(typeof renderAll==='function')renderAll();
-      };
-    };
-  });
-
 }());
 </script>
 </body>
