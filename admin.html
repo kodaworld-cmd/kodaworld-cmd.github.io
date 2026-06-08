@@ -438,7 +438,7 @@ tr:hover td { background: #f8fafc; }
         </table>
       </div>
     </div>
-    <div class="section-card" style="margin-top:16px;border:2px solid #fde047"><div class="section-header" style="background:#fefce8"><h3 style="color:#713f12">🔐 管理員進階功能</h3></div><div style="padding:16px"><label style="font-size:12px;font-weight:700;color:var(--muted);display:block;margin-bottom:6px">Supabase Service Role Key（設定後可自動刪帳號、直接設定密碼，key 僅存瀏覽器不上傳）</label><div style="display:flex;gap:8px;align-items:center"><input id="serviceKeyInput" type="password" placeholder="sb_secret_..." style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace"><button id="saveSkBtn" style="background:#ca8a04;color:#fff;border:none;border-radius:7px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer">儲存</button><button id="clearSkBtn" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5;border-radius:7px;padding:9px 12px;font-size:13px;font-weight:700;cursor:pointer">清除</button></div><div id="serviceKeyStatus" style="margin-top:8px;font-size:12px;color:var(--muted)"></div></div></div>
+    <div class="section-card" style="margin-top:16px;border:2px solid var(--border)"><div class="section-header"><h3>ℹ️ 進階功能說明</h3></div><div style="padding:14px;font-size:13px;line-height:1.8;color:var(--muted)">🗑 <strong>刪除帳號</strong>：會自動刪除系統資料，Auth 認證記錄需另至 <a href="https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users" target="_blank" style="color:var(--primary)">Supabase Dashboard</a> 手動刪除，刪除後使用者才能用同 Email 重新申請。<br>🔑 <strong>重設密碼</strong>：點按鈕後寄出重設信，使用者點信中連結即可設定新密碼。</div></div>
     <!-- 資料清理 -->
     <div class="section-card" style="margin-top:16px">
       <div class="section-header"><h3>🗂 資料清理</h3><span style="font-size:12px;color:var(--muted)">定期清除舊訂單以維持資料庫效能</span></div>
@@ -1881,114 +1881,117 @@ init();
 (function() {
   'use strict';
 
-  // ── sbAdmin init ──────────────────────────────────────
-  window.sbAdmin = null;
-  var _SK = '';
-  try { _SK = localStorage.getItem('sb_service_key') || ''; } catch(e) {}
-  function _initAdmin(key) {
-    if (!key) return;
-    try { window.sbAdmin = window.supabase.createClient('https://jpabzycaqybbvebwewrt.supabase.co', key, { auth: { autoRefreshToken: false, persistSession: false } }); } catch(e) { console.warn('sbAdmin:', e); }
+  // ── Password recovery from email link ─────────────────
+  // When user clicks reset link in email, they land on admin.html#access_token=...&type=recovery
+  // Detect this and show password reset form
+  function checkRecoveryToken() {
+    var hash = window.location.hash;
+    if (!hash || hash.indexOf('type=recovery') === -1) return;
+    var params = {};
+    hash.replace(/^#/, '').split('&').forEach(function(part) {
+      var kv = part.split('=');
+      params[kv[0]] = decodeURIComponent(kv[1] || '');
+    });
+    if (!params.access_token) return;
+    // Show password reset overlay
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:12px;padding:28px;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.3)">'
+      + '<div style="text-align:center;margin-bottom:20px">'
+      + '<div style="font-size:32px;margin-bottom:8px">🔐</div>'
+      + '<h2 style="font-size:18px;font-weight:800;color:#1e293b">設定新密碼</h2>'
+      + '<p style="font-size:13px;color:#64748b;margin-top:4px">請輸入您的新密碼</p>'
+      + '</div>'
+      + '<div style="margin-bottom:14px">'
+      + '<label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:6px">新密碼（至少 8 個字元）</label>'
+      + '<input id="recoveryPw1" type="password" placeholder="••••••••" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">'
+      + '</div>'
+      + '<div style="margin-bottom:20px">'
+      + '<label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:6px">確認新密碼</label>'
+      + '<input id="recoveryPw2" type="password" placeholder="••••••••" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">'
+      + '</div>'
+      + '<button id="recoveryBtn" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">確認設定新密碼</button>'
+      + '<div id="recoveryMsg" style="margin-top:10px;font-size:13px;text-align:center;color:#64748b"></div>'
+      + '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('recoveryBtn').onclick = async function() {
+      var pw1 = document.getElementById('recoveryPw1').value;
+      var pw2 = document.getElementById('recoveryPw2').value;
+      var msg = document.getElementById('recoveryMsg');
+      if (pw1.length < 8) { msg.style.color='#dc2626'; msg.textContent='密碼至少 8 個字元'; return; }
+      if (pw1 !== pw2) { msg.style.color='#dc2626'; msg.textContent='兩次密碼不一致'; return; }
+      msg.style.color='#64748b'; msg.textContent='設定中…';
+      // Set session from recovery token first
+      try {
+        var _sb = sb;
+        await _sb.auth.setSession({ access_token: params.access_token, refresh_token: params.refresh_token || '' });
+        var r = await _sb.auth.updateUser({ password: pw1 });
+        if (r.error) { msg.style.color='#dc2626'; msg.textContent='設定失敗：'+r.error.message; return; }
+        msg.style.color='#16a34a'; msg.textContent='✅ 密碼已成功更新！';
+        setTimeout(function() {
+          overlay.remove();
+          window.location.hash = '';
+          window.location.reload();
+        }, 1500);
+      } catch(e) { msg.style.color='#dc2626'; msg.textContent='錯誤：'+e.message; }
+    };
   }
-  if (_SK) _initAdmin(_SK);
+  // Check after page loads and sb is initialized
+  var _checkInterval = setInterval(function() {
+    if (typeof sb !== 'undefined' && sb) { clearInterval(_checkInterval); checkRecoveryToken(); }
+  }, 200);
 
-  // ── deleteUser — DIRECT OVERRIDE ─────────────────────
-  // Runs after main script, so will always take effect
+  // ── deleteUser override ───────────────────────────────
   window.deleteUser = async function(userId, email) {
-    if (!confirm('確定完整刪除「' + email + '」的帳號？\n\n刪除後對方可用同 Email 重新申請。')) return;
-    var _sb = window.sb || sb;
+    if (!confirm('確定刪除「' + email + '」的系統帳號資料？\n\n（Auth 認證記錄需另至 Supabase Dashboard 刪除，才能讓對方用同 Email 重新申請）')) return;
+    var _sb = sb;
     await _sb.from('user_store_access').delete().eq('user_id', userId);
     await _sb.from('user_profiles').delete().eq('id', userId);
-    if (window.sbAdmin) {
-      var r = await window.sbAdmin.auth.admin.deleteUser(userId);
-      showToast(r.error ? '⚠️ 資料已刪，Auth 刪除失敗：' + r.error.message : '✅ 已完整刪除「' + email + '」');
-    } else {
-      showToast('✅ 資料已刪除');
-      setTimeout(function() {
-        if (confirm('還需到 Supabase Dashboard 手動刪除「' + email + '」的認證記錄，對方才能重新申請。\n\n是否立即開啟？'))
-          window.open('https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users', '_blank');
-      }, 300);
-    }
+    showToast('✅ 系統資料已刪除');
+    setTimeout(function() {
+      if (confirm('系統資料已刪除。\n\n是否立即開啟 Supabase Dashboard 刪除 Auth 認證記錄？\n（刪除後對方才能用同 Email 重新申請）'))
+        window.open('https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users', '_blank');
+    }, 300);
     if (typeof loadUserList === 'function') loadUserList();
   };
 
-  // ── resetUserPassword — DIRECT OVERRIDE ──────────────
+  // ── resetUserPassword override ────────────────────────
   window.resetUserPassword = function(email, userId) {
-    var _sb = window.sb || sb;
-    if (window.sbAdmin && userId) {
-      var newPw = window.prompt('直接設定「' + email + '」的新密碼（至少 8 碼），或按取消改寄重設信：');
-      if (newPw === null) {
-        // send email
-      } else if (newPw.length < 8) {
-        showToast('❌ 密碼至少 8 個字元'); return;
-      } else {
-        window.sbAdmin.auth.admin.updateUserById(userId, { password: newPw })
-          .then(function(r) { showToast(r.error ? '❌ ' + r.error.message : '✅ 已為 ' + email + ' 設定新密碼'); });
-        return;
-      }
-    }
-    if (!confirm('寄送密碼重設信給「' + email + '」？')) return;
-    _sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.href.split('#')[0] })
-      .then(function(r) { showToast(r.error ? '❌ ' + r.error.message : '✅ 已寄出重設密碼信至 ' + email); });
+    if (!confirm('寄送密碼重設信給「' + email + '」？\n\n使用者點信中連結後會回到此頁面設定新密碼。')) return;
+    var redirectUrl = 'https://kodaworld-cmd.github.io/admin.html';
+    sb.auth.resetPasswordForEmail(email, { redirectTo: redirectUrl })
+      .then(function(r) {
+        if (r.error) { showToast('❌ 發送失敗：' + r.error.message); return; }
+        showToast('✅ 已寄出重設密碼信至 ' + email);
+      });
   };
 
-  // ── grantStore — DIRECT OVERRIDE ─────────────────────
+  // ── grantStore override ───────────────────────────────
   window.grantStore = async function(userId) {
     var sel = document.getElementById('grant_' + userId);
     var storeKey = sel ? sel.value : '';
     if (!storeKey) return;
-    var _sb = window.sb || sb;
     if (storeKey === '__ALL__') {
       if (!confirm('確定一次指派所有門市給此使用者？')) return;
       var eff = (window.ALL_STORE_KEYS || []).concat((window.cachedCustomStores || []).map(function(s){ return s.key; }));
-      var r0 = await _sb.from('user_store_access').select('store_key').eq('user_id', userId);
+      var r0 = await sb.from('user_store_access').select('store_key').eq('user_id', userId);
       var has = new Set((r0.data || []).map(function(x){ return x.store_key; }));
       var toAdd = eff.filter(function(s){ return !has.has(s); }).map(function(s){ return { user_id: userId, store_key: s }; });
       if (!toAdd.length) { showToast('此使用者已有所有門市權限'); return; }
-      var r1 = await _sb.from('user_store_access').insert(toAdd);
+      var r1 = await sb.from('user_store_access').insert(toAdd);
       if (r1.error) { showToast('❌ 批次指派失敗：' + r1.error.message); return; }
       showToast('✅ 已指派全部 ' + toAdd.length + ' 家門市');
       if (typeof loadUserList === 'function') loadUserList();
       return;
     }
-    var r2 = await _sb.from('user_store_access').insert({ user_id: userId, store_key: storeKey });
+    var r2 = await sb.from('user_store_access').insert({ user_id: userId, store_key: storeKey });
     if (r2.error) { showToast('❌ 指派失敗'); return; }
     showToast('✅ 已指派 ' + storeKey);
     if (typeof loadUserList === 'function') loadUserList();
   };
 
-  // ── Service key save/clear ────────────────────────────
-  window.saveServiceKey = function() {
-    var inp = document.getElementById('serviceKeyInput');
-    var val = inp ? inp.value.trim() : '';
-    if (!val) { showToast('請輸入 key'); return; }
-    try { localStorage.setItem('sb_service_key', val); } catch(e) {}
-    _initAdmin(val);
-    var st = document.getElementById('serviceKeyStatus');
-    if (st) st.innerHTML = '<span style="color:var(--green);font-weight:700">✅ 已儲存並啟用</span>';
-    showToast('✅ Service key 已儲存');
-  };
-  window.clearServiceKey = function() {
-    try { localStorage.removeItem('sb_service_key'); } catch(e) {}
-    window.sbAdmin = null;
-    var inp = document.getElementById('serviceKeyInput'); if (inp) inp.value = '';
-    var st = document.getElementById('serviceKeyStatus'); if (st) st.innerHTML = '<span style="color:var(--orange)">已清除</span>';
-    showToast('Service key 已清除');
-  };
-
-  // ── DOM ready: wire buttons + Daiwa ──────────────────
-  document.addEventListener('DOMContentLoaded', function() {
-    var b1 = document.getElementById('saveSkBtn'); if (b1) b1.onclick = window.saveServiceKey;
-    var b2 = document.getElementById('clearSkBtn'); if (b2) b2.onclick = window.clearServiceKey;
-    var b3 = document.getElementById('daiwaCopyBtn');
-    if (b3) b3.onclick = function() {
-      var el = document.getElementById('daiwaMsg');
-      if (!el || !el.value) { showToast('本週無台北車站訂單'); return; }
-      if (navigator.clipboard) { navigator.clipboard.writeText(el.value).then(function(){ showToast('✅ 已複製大榮貨運預約文字'); }); }
-      else { el.select(); document.execCommand('copy'); showToast('✅ 已複製'); }
-    };
-  });
-
-  // ── Daiwa render ─────────────────────────────────────
+  // ── Daiwa render ──────────────────────────────────────
   var DAIWA = ['台北車站'];
   window.renderDaiwaSection = function() {
     if (typeof allOrders === 'undefined') return;
@@ -2021,18 +2024,12 @@ init();
   if (typeof _oRA === 'function') {
     window.renderAll = function() { _oRA.apply(this, arguments); window.renderDaiwaSection(); };
   }
+
   var _oST = window.switchTab;
   if (typeof _oST === 'function') {
     window.switchTab = function(n) {
       _oST(n);
       if (n === 3) setTimeout(window.renderDaiwaSection, 100);
-      if (n === 8) {
-        try {
-          var sk = localStorage.getItem('sb_service_key');
-          var inp = document.getElementById('serviceKeyInput');
-          if (inp && sk) { inp.value = sk; var st = document.getElementById('serviceKeyStatus'); if(st) st.innerHTML = '<span style="color:var(--green);font-weight:700">✅ Service key 已設定</span>'; }
-        } catch(e) {}
-      }
     };
   }
 
@@ -2081,7 +2078,7 @@ init();
       var name=document.getElementById('ed_n').value.trim()||p.name;
       var sn=document.getElementById('ed_s').value.trim()||name.slice(0,4);
       var cat2=document.getElementById('ed_c').value, u=document.getElementById('ed_u').value;
-      var st=document.getElementById('ed_st').value.trim()||u;
+      var stu=document.getElementById('ed_st').value.trim()||u;
       var bt2=document.getElementById('ed_bt').value;
       var lq=parseInt(document.getElementById('ed_l').value)||0;
       var pb=parseInt(document.getElementById('ed_p').value)||1;
@@ -2089,11 +2086,10 @@ init();
       var sp=parseInt(document.getElementById('ed_sp').value)||1;
       if(!name){showToast('品項名稱不能為空');return;}
       var pbd=bt2==='loose'?lq:(bt2==='none'?1:pb);
-      var payload={id:id,name:name,short_name:sn,unit:u,stock_unit:st,cat:cat2,box_type:bt2,loose_box_qty:lq,per_box_default:pbd,min_qty:mn,step:sp,is_active:true};
-      var _sb2=window.sb||sb;
+      var payload={id:id,name:name,short_name:sn,unit:u,stock_unit:stu,cat:cat2,box_type:bt2,loose_box_qty:lq,per_box_default:pbd,min_qty:mn,step:sp,is_active:true};
       var err;
-      if(existing){var r=await _sb2.from('custom_products').update(payload).eq('id',id);err=r.error;}
-      else{var r2=await _sb2.from('custom_products').insert(payload);err=r2.error;}
+      if(existing){var r=await sb.from('custom_products').update(payload).eq('id',id);err=r.error;}
+      else{var r2=await sb.from('custom_products').insert(payload);err=r2.error;}
       if(err){showToast('儲存失敗：'+err.message);return;}
       if(existing){var idx=(window.cachedCustomProducts||[]).findIndex(function(x){return x.id===id;});if(idx>=0)window.cachedCustomProducts[idx]=Object.assign({},window.cachedCustomProducts[idx],payload);}
       else{if(window.cachedCustomProducts)window.cachedCustomProducts.push(payload);}
@@ -2103,6 +2099,17 @@ init();
       if(typeof renderAll==='function')renderAll();
     };
   };
+
+  // ── Copy button wiring ────────────────────────────────
+  document.addEventListener('DOMContentLoaded', function() {
+    var b = document.getElementById('daiwaCopyBtn');
+    if (b) b.onclick = function() {
+      var el = document.getElementById('daiwaMsg');
+      if (!el || !el.value) { showToast('本週無台北車站訂單'); return; }
+      if (navigator.clipboard) { navigator.clipboard.writeText(el.value).then(function(){ showToast('✅ 已複製大榮貨運預約文字'); }); }
+      else { el.select(); document.execCommand('copy'); showToast('✅ 已複製'); }
+    };
+  });
 
 }());
 </script>
