@@ -510,7 +510,8 @@ tr:hover td { background: #f8fafc; }
 // ========================
 const SUPABASE_URL = 'https://jpabzycaqybbvebwewrt.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_nNp7DYbaTBtWm39agYBczg_c1sR7-4F';
-const SUPABASE_SERVICE_KEY = localStorage.getItem('sb_service_key') || '';
+// service_role key 存本機，安全不上傳 GitHub
+const SUPABASE_SERVICE_KEY = (()=>{ try{ return localStorage.getItem('sb_service_key')||''; }catch(e){ return ''; } })();
 let sb;
 let sbAdmin = null;
 
@@ -712,7 +713,7 @@ async function init() {
   const { createClient } = window.supabase;
   sb = createClient(SUPABASE_URL, SUPABASE_KEY);
   if (SUPABASE_SERVICE_KEY) {
-    sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { autoRefreshToken: false, persistSession: false } });
+    try { sbAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { autoRefreshToken: false, persistSession: false } }); } catch(e) { console.warn('sbAdmin init failed', e); }
   }
 
   sb.auth.onAuthStateChange((event) => {
@@ -1000,12 +1001,12 @@ async function saveOrder(storeKey, orderId) {
   loadData();
 }
 
-const DAIWA_STORES = new Set(['台北車站']);
-function copyDaiwaMsg(input) {
-  if (!input||!input.value) { showToast('本週無台北車站訂單'); return; }
-  navigator.clipboard.writeText(input.value).then(()=>showToast('✅ 已複製大榮貨運預約文字')).catch(()=>{ input.select(); document.execCommand('copy'); showToast('✅ 已複製'); });
+const DAIWA_STORES=new Set(['台北車站']);
+function copyDaiwaMsg(input){
+  if(!input||!input.value){showToast('本週無台北車站訂單');return;}
+  navigator.clipboard.writeText(input.value).then(()=>showToast('✅ 已複製大榮貨運預約文字')).catch(()=>{input.select();document.execCommand('copy');showToast('✅ 已複製');});
 }
-function renderLogistics() {
+function renderLogistics(){
   const orderMap={}; allOrders.forEach(o=>{orderMap[o.store_key]=o;});
   const lastMap={}; lastWeekOrders.forEach(o=>{lastMap[o.store_key]=o;});
   const frozenProds=PRODUCTS.filter(p=>p.cat==='冷凍');
@@ -1016,24 +1017,21 @@ function renderLogistics() {
   const rows=mainMaster.map(sm=>{
     const o=orderMap[sm.key];
     if(!o) return `<tr><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
-    const data=o.data||{};
-    const frozen=frozenProds.reduce((s,p)=>s+(data[p.id]?.order||0),0);
-    const ambient=ambientProds.reduce((s,p)=>s+(data[p.id]?.order||0),0);
-    const total=frozen+ambient; frozenGrand+=frozen; ambientGrand+=ambient; totalGrand+=total;
+    const data=o.data||{}; const frozen=frozenProds.reduce((s,p)=>s+(data[p.id]?.order||0),0); const ambient=ambientProds.reduce((s,p)=>s+(data[p.id]?.order||0),0); const total=frozen+ambient;
+    frozenGrand+=frozen; ambientGrand+=ambient; totalGrand+=total;
     return `<tr><td><span class="region-badge">${sm.region}</span></td><td><strong>${sm.fullName||sm.key}</strong></td><td class="${frozen>0?'frozen-cell':'zero-cell'}">${frozen>0?frozen:'—'}</td><td class="${ambient>0?'ambient-cell':'zero-cell'}">${ambient>0?ambient:'—'}</td><td class="${total>0?'total-cell':'zero-cell'}">${total>0?total:'—'}</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
   });
   const mc=new Set(allOrders.filter(o=>!DAIWA_STORES.has(o.store_key)).map(o=>o.store_key)).size;
   document.getElementById('logisticsBody').innerHTML=rows.join('')+`<tr class="total-row"><td colspan="2" style="font-weight:800">合計（${mc} 家門市）</td><td class="frozen-cell">${frozenGrand}</td><td class="ambient-cell">${ambientGrand}</td><td class="total-cell">${totalGrand}</td><td colspan="2"></td></tr>`;
-  const daiwaMaster=activeMaster.filter(sm=>DAIWA_STORES.has(sm.key));
-  let daiwaTotal=0;
+  const daiwaMaster=activeMaster.filter(sm=>DAIWA_STORES.has(sm.key)); let daiwaTotal=0;
   const dr=daiwaMaster.map(sm=>{
     const o=orderMap[sm.key];
     if(!o) return `<tr><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
     const data=o.data||{}; const frozen=frozenProds.reduce((s,p)=>s+(data[p.id]?.order||0),0); const ambient=ambientProds.reduce((s,p)=>s+(data[p.id]?.order||0),0); const total=frozen+ambient; daiwaTotal+=total;
     return `<tr><td><span class="region-badge">${sm.region}</span></td><td><strong>${sm.fullName||sm.key}</strong></td><td class="${frozen>0?'frozen-cell':'zero-cell'}">${frozen>0?frozen:'—'}</td><td class="${ambient>0?'ambient-cell':'zero-cell'}">${ambient>0?ambient:'—'}</td><td class="${total>0?'total-cell':'zero-cell'}">${total>0?total:'—'}</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
   });
-  const db=document.getElementById('daiwaBody'); if(db){ db.innerHTML=dr.length?dr.join('')+`<tr class="total-row"><td colspan="4" style="font-weight:800">合計</td><td class="total-cell">${daiwaTotal}</td><td colspan="2"></td></tr>`:'<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--muted)">本週無訂單</td></tr>'; }
-  const di=document.getElementById('daiwaMsg'); if(di){ di.value=daiwaTotal>0?`幫我預約，大榮貨運（台北車站-${daiwaTotal}箱），謝謝`:''; di.placeholder=daiwaTotal>0?'':'（本週無台北車站訂單）'; }
+  const db=document.getElementById('daiwaBody'); if(db) db.innerHTML=dr.length?dr.join('')+`<tr class="total-row"><td colspan="4" style="font-weight:800">合計</td><td class="total-cell">${daiwaTotal}</td><td colspan="2"></td></tr>`:'<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--muted)">本週無訂單</td></tr>';
+  const di=document.getElementById('daiwaMsg'); if(di){di.value=daiwaTotal>0?`幫我預約，大榮貨運（台北車站-${daiwaTotal}箱），謝謝`:''; di.placeholder=daiwaTotal>0?'':'（本週無台北車站訂單）';}
 
   const wf=document.getElementById('weekFilter');
   const weekKey=wf.value;
@@ -1321,54 +1319,47 @@ async function addCustomProduct() {
 
 
 async function editDefaultProduct(id) {
-  const p = PRODUCTS_DEFAULT.find(x => x.id === id);
-  if (!p) return;
-  const existing = cachedCustomProducts.find(x => x.id === id);
-  const cur = existing || {};
-  const curBT = cur.box_type||'box', curCat=cur.cat||p.cat||'冷凍', curUnit=cur.unit||p.unit||'箱';
+  const p=PRODUCTS_DEFAULT.find(x=>x.id===id); if(!p) return;
+  const existing=cachedCustomProducts.find(x=>x.id===id); const cur=existing||{};
+  const curBT=cur.box_type||'box', curCat=cur.cat||p.cat||'冷凍', curUnit=cur.unit||p.unit||'箱';
   document.getElementById('editDefaultModal')?.remove();
-  const modal = document.createElement('div');
-  modal.id = 'editDefaultModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-  modal.innerHTML =
-    '<div style="background:#fff;border-radius:12px;padding:20px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
-        '<h3 style="font-size:15px;font-weight:800">✏️ 編輯預設品項</h3>' +
-        '<button id="edClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b">✕</button>' +
-      '</div>' +
-      '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:12px">' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項 ID</label><input value="'+p.id+'" disabled style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--muted)"></div>' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項名稱 *</label><input id="edName" value="'+(cur.name||p.name)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">縮寫（列印用）</label><input id="edShort" maxlength="5" value="'+(cur.short_name||p.short||p.name.slice(0,4))+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>' +
-      '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">分類</label><select id="edCat" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff"><option value="冷凍"'+(curCat==='冷凍'?' selected':'')+'>冷凍</option><option value="常温"'+(curCat==='常温'?' selected':'')+'>常温</option><option value="代訂"'+(curCat==='代訂'?' selected':'')+'>代訂</option></select></div>' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂貨單位</label><select id="edUnit" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff">'+['箱','包','罐','個'].map(u=>'<option'+(curUnit===u?' selected':'')+'>'+u+'</option>').join('')+'</select></div>' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">盤點單位</label><input id="edStock" value="'+(cur.stock_unit||p.stockUnit||p.unit)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>' +
-      '</div>' +
-      '<div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">' +
-        '<div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px">📦 箱裝方式</div>' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
-          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">包裝類型</label><select id="edBoxType" onchange="edBoxTypeChange()" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:#fff"><option value="box"'+(curBT==='box'?' selected':'')+'>整箱訂貨（訂 1 箱 ＝ 出貨 1 箱）</option><option value="loose"'+(curBT==='loose'?' selected':'')+'>散貨拼裝（多包/罐合拼為 1 箱）</option><option value="none"'+(curBT==='none'?' selected':'')+'>不計算箱數</option></select></div>' +
-          '<div id="edLooseWrap"'+(curBT!=='loose'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">幾個/包/罐 可拼 1 箱</label><input id="edLooseQty" type="number" min="1" value="'+(cur.loose_box_qty||(LOOSE_BOX_DEFAULT[id]||10))+'" style="width:100%;padding:8px;border:1.5px solid #fdba74;border-radius:7px;font-size:14px;font-weight:700;text-align:center;background:#fffbeb"></div>' +
-          '<div id="edPerBoxWrap"'+(curBT==='none'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">每箱個數（顯示用）</label><input id="edPerBox" type="number" min="1" value="'+(cur.per_box_default||p.perBoxDefault||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>' +
-        '</div>' +
-      '</div>' +
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">最低訂量</label><input id="edMinQty" type="number" min="1" value="'+(cur.min_qty||p.minQty||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>' +
-        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂購倍數 <span style="font-weight:400;color:#94a3b8">（每次+/-幾個）</span></label><input id="edStep" type="number" min="1" value="'+(cur.step||p.step||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>' +
-      '</div>' +
-      '<div style="display:flex;gap:8px"><button id="edSave" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存</button><button id="edCancel" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button></div>' +
+  const modal=document.createElement('div'); modal.id='editDefaultModal';
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML=
+    '<div style="background:#fff;border-radius:12px;padding:20px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:15px;font-weight:800">✏️ 編輯預設品項</h3><button id="edClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b">✕</button></div>'+
+      '<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:12px">'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項 ID</label><input value="'+p.id+'" disabled style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--muted)"></div>'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項名稱 *</label><input id="edName" value="'+(cur.name||p.name)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">縮寫（列印用）</label><input id="edShort" maxlength="5" value="'+(cur.short_name||p.short||p.name.slice(0,4))+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">分類</label><select id="edCat" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff"><option value="冷凍"'+(curCat==='冷凍'?' selected':'')+'>冷凍</option><option value="常温"'+(curCat==='常温'?' selected':'')+'>常温</option><option value="代訂"'+(curCat==='代訂'?' selected':'')+'>代訂</option></select></div>'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂貨單位</label><select id="edUnit" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;background:#fff">'+['箱','包','罐','個'].map(u=>'<option'+(curUnit===u?' selected':'')+'>'+u+'</option>').join('')+'</select></div>'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">盤點單位</label><input id="edStock" value="'+(cur.stock_unit||p.stockUnit||p.unit)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'+
+      '</div>'+
+      '<div style="background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">'+
+        '<div style="font-size:11px;font-weight:800;color:var(--muted);margin-bottom:8px">📦 箱裝方式</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">'+
+          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">包裝類型</label><select id="edBoxType" onchange="edBoxTypeChange()" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:#fff"><option value="box"'+(curBT==='box'?' selected':'')+'>整箱訂貨（訂 1 箱 ＝ 出貨 1 箱）</option><option value="loose"'+(curBT==='loose'?' selected':'')+'>散貨拼裝（多包/罐合拼為 1 箱）</option><option value="none"'+(curBT==='none'?' selected':'')+'>不計算箱數</option></select></div>'+
+          '<div id="edLooseWrap"'+(curBT!=='loose'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">幾個/包/罐 可拼 1 箱</label><input id="edLooseQty" type="number" min="1" value="'+(cur.loose_box_qty||(LOOSE_BOX_DEFAULT[id]||10))+'" style="width:100%;padding:8px;border:1.5px solid #fdba74;border-radius:7px;font-size:14px;font-weight:700;text-align:center;background:#fffbeb"></div>'+
+          '<div id="edPerBoxWrap"'+(curBT==='none'?' style="display:none"':'')+' ><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">每箱個數（顯示用）</label><input id="edPerBox" type="number" min="1" value="'+(cur.per_box_default||p.perBoxDefault||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">最低訂量</label><input id="edMinQty" type="number" min="1" value="'+(cur.min_qty||p.minQty||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'+
+        '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂購倍數 <span style="font-weight:400;color:#94a3b8">（每次+/-幾個）</span></label><input id="edStep" type="number" min="1" value="'+(cur.step||p.step||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px"><button id="edSave" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存</button><button id="edCancel" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button></div>'+
     '</div>';
   document.body.appendChild(modal);
-  window.edBoxTypeChange=function(){ const v=document.getElementById('edBoxType').value; document.getElementById('edLooseWrap').style.display=v==='loose'?'':'none'; document.getElementById('edPerBoxWrap').style.display=v==='none'?'none':''; };
+  window.edBoxTypeChange=function(){const v=document.getElementById('edBoxType').value;document.getElementById('edLooseWrap').style.display=v==='loose'?'':'none';document.getElementById('edPerBoxWrap').style.display=v==='none'?'none':'';};
   document.getElementById('edClose').onclick=()=>modal.remove();
   document.getElementById('edCancel').onclick=()=>modal.remove();
   document.getElementById('edSave').onclick=async()=>{
     const name=document.getElementById('edName').value.trim()||p.name;
     const shortName=document.getElementById('edShort').value.trim()||name.slice(0,4);
-    const cat=document.getElementById('edCat').value;
-    const unit=document.getElementById('edUnit').value;
+    const cat=document.getElementById('edCat').value; const unit=document.getElementById('edUnit').value;
     const stock=document.getElementById('edStock').value.trim()||unit;
     const boxType=document.getElementById('edBoxType').value;
     const looseQty=parseInt(document.getElementById('edLooseQty').value)||0;
@@ -1384,8 +1375,7 @@ async function editDefaultProduct(id) {
     if(error){showToast('❌ 儲存失敗：'+error.message);return;}
     if(existing){const idx=cachedCustomProducts.findIndex(x=>x.id===id);if(idx>=0)cachedCustomProducts[idx]={...cachedCustomProducts[idx],...payload};}
     else{cachedCustomProducts.push(payload);}
-    modal.remove();
-    showToast('✅ 已儲存「'+name+'」的設定');
+    modal.remove(); showToast('✅ 已儲存「'+name+'」的設定');
     rebuildProducts();renderProductList();renderAll();
   };
 }
@@ -1560,7 +1550,7 @@ function switchTab(n) {
   if(n===5) renderSettings();
   if(n===6) renderStoreList();
   if(n===7) loadUserList();
-  if(n===8) { const sk=localStorage.getItem('sb_service_key'); const inp=document.getElementById('serviceKeyInput'); const st=document.getElementById('serviceKeyStatus'); if(inp&&sk){inp.value=sk; if(st) st.innerHTML='<span style="color:var(--green);font-weight:700">✅ Service key 已設定，進階功能啟用中</span>';} }
+  if(n===8){const sk=(()=>{try{return localStorage.getItem('sb_service_key');}catch(e){return null;}})(); const inp=document.getElementById('serviceKeyInput'); const st=document.getElementById('serviceKeyStatus'); if(inp&&sk){inp.value=sk; if(st)st.innerHTML='<span style="color:var(--green);font-weight:700">✅ Service key 已設定</span>';}}
   if(n===8) renderProductList();
 }
 
@@ -1640,12 +1630,12 @@ async function loadUserList() {
   }).join('');
 }
 
-async function grantStore(userId) {
+async function grantStore(userId){
   const sel=document.getElementById(`grant_${userId}`); const storeKey=sel.value; if(!storeKey) return;
   if(storeKey==='__ALL__'){
     if(!confirm('確定一次指派所有門市給此使用者？')) return;
     const eff=[...ALL_STORE_KEYS,...cachedCustomStores.map(s=>s.key)];
-    const {data:ex}=await sb.from('user_store_access').select('store_key').eq('user_id',userId);
+    const{data:ex}=await sb.from('user_store_access').select('store_key').eq('user_id',userId);
     const ass=new Set((ex||[]).map(r=>r.store_key));
     const toAdd=eff.filter(s=>!ass.has(s)).map(s=>({user_id:userId,store_key:s}));
     if(!toAdd.length){showToast('此使用者已有所有門市權限');return;}
@@ -1727,7 +1717,7 @@ async function deleteUser(userId,email){
     else{showToast(`✅ 已完整刪除「${email}」`);}
   }else{
     showToast('✅ 資料已刪除');
-    setTimeout(()=>{if(confirm(`資料已刪除完畢。\n\n還需到 Supabase Dashboard 手動刪除「${email}」的認證記錄，對方才能用同 Email 重新申請。\n\n是否立即開啟？`))window.open('https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users','_blank');},300);
+    setTimeout(()=>{if(confirm(`資料已刪除完畢。\n\n還需到 Supabase Dashboard 手動刪除「${email}」的認證記錄。\n\n是否立即開啟？`))window.open('https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users','_blank');},300);
   }
   loadUserList();
 }
@@ -1748,16 +1738,17 @@ async function suspendUser(userId, email) {
 function saveServiceKey(){
   const val=document.getElementById('serviceKeyInput').value.trim();
   if(!val){showToast('❌ 請輸入 key');return;}
-  localStorage.setItem('sb_service_key',val);
+  try{localStorage.setItem('sb_service_key',val);}catch(e){}
   const{createClient}=window.supabase;
-  sbAdmin=createClient(SUPABASE_URL,val,{auth:{autoRefreshToken:false,persistSession:false}});
-  document.getElementById('serviceKeyStatus').innerHTML='<span style="color:var(--green);font-weight:700">✅ 已儲存並啟用 — 下次開啟自動載入</span>';
+  try{sbAdmin=createClient(SUPABASE_URL,val,{auth:{autoRefreshToken:false,persistSession:false}});}catch(e){showToast('❌ key 格式錯誤');return;}
+  const el=document.getElementById('serviceKeyStatus'); if(el) el.innerHTML='<span style="color:var(--green);font-weight:700">✅ 已儲存並啟用</span>';
   showToast('✅ Service key 已儲存，進階功能已啟用');
 }
 function clearServiceKey(){
-  localStorage.removeItem('sb_service_key'); sbAdmin=null;
+  try{localStorage.removeItem('sb_service_key');}catch(e){}
+  sbAdmin=null;
   document.getElementById('serviceKeyInput').value='';
-  document.getElementById('serviceKeyStatus').innerHTML='<span style="color:var(--orange)">已清除</span>';
+  const el=document.getElementById('serviceKeyStatus'); if(el) el.innerHTML='<span style="color:var(--orange)">已清除</span>';
   showToast('Service key 已清除');
 }
 
