@@ -1226,8 +1226,9 @@ function rebuildProducts() {
     if (p.box_type==='loose' && p.loose_box_qty>0) LOOSE_BOX[p.id] = p.loose_box_qty;
     else if (p.box_type==='none') LOOSE_BOX[p.id] = 0;
   });
+  const cpIds = new Set(activeCp.map(p => p.id));
   const enabledDefaults = PRODUCTS_DEFAULT.filter(p =>
-    !cachedDisabledDefaults.includes(p.id) && !cachedDeletedDefaults.includes(p.id)
+    !cachedDisabledDefaults.includes(p.id) && !cachedDeletedDefaults.includes(p.id) && !cpIds.has(p.id)
   );
   PRODUCTS = [...enabledDefaults, ...activeCp.map(p => ({
     id:p.id, name:p.name, short:p.short_name||p.name.slice(0,4),
@@ -1268,6 +1269,107 @@ async function addCustomProduct() {
   document.getElementById('npPerBox').value='1'; document.getElementById('npMinQty').value='1';
   msg.style.color='var(--green)'; msg.textContent=`✅ 已新增「${name}」`;
   setTimeout(()=>{ msg.textContent=''; },3000);
+}
+
+
+async function editDefaultProduct(id) {
+  const p = PRODUCTS_DEFAULT.find(x => x.id === id);
+  if (!p) return;
+  // Check if already has a custom override
+  const existing = cachedCustomProducts.find(x => x.id === id);
+  const cur = existing || {};
+
+  const modal = document.createElement('div');
+  modal.id = 'editDefaultModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:12px;padding:20px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+        '<h3 style="font-size:15px;font-weight:800">✏️ 編輯預設品項</h3>' +
+        '<button id="edClose" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>' +
+      '</div>' +
+      '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:12px">' + p.name + ' (#' + p.id + ')</div>' +
+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
+        '<div>' +
+          '<label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂貨單位</label>' +
+          '<input id="edUnit" value="' + (cur.unit || p.unit) + '" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+        '</div>' +
+        '<div>' +
+          '<label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">盤點單位</label>' +
+          '<input id="edStock" value="' + (cur.stock_unit || p.stockUnit || p.unit) + '" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="margin-bottom:12px">' +
+        '<label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">包裝類型</label>' +
+        '<select id="edBoxType" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+          '<option value="box" ' + ((!cur.box_type || cur.box_type==='box')?'selected':'') + '>整箱訂貨</option>' +
+          '<option value="loose" ' + (cur.box_type==='loose'?'selected':'') + '>散貨拼裝（多包合一箱）</option>' +
+          '<option value="none" ' + (cur.box_type==='none'?'selected':'') + '>不計算箱數</option>' +
+        '</select>' +
+      '</div>' +
+
+      '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">' +
+        '<div>' +
+          '<label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">幾個拼1箱</label>' +
+          '<input id="edLooseQty" type="number" min="0" value="' + (cur.loose_box_qty || (LOOSE_BOX_DEFAULT[id] || 0)) + '" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+        '</div>' +
+        '<div>' +
+          '<label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">最低訂量</label>' +
+          '<input id="edMinQty" type="number" min="1" value="' + (cur.min_qty || p.minQty || 1) + '" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+        '</div>' +
+        '<div>' +
+          '<label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">步進</label>' +
+          '<input id="edStep" type="number" min="1" value="' + (cur.step || p.step || 1) + '" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="display:flex;gap:8px">' +
+        '<button id="edSave" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存</button>' +
+        '<button id="edCancel" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+
+  document.getElementById('edClose').onclick  = () => modal.remove();
+  document.getElementById('edCancel').onclick = () => modal.remove();
+  document.getElementById('edSave').onclick   = async () => {
+    const unit     = document.getElementById('edUnit').value.trim() || p.unit;
+    const stock    = document.getElementById('edStock').value.trim() || p.stockUnit;
+    const boxType  = document.getElementById('edBoxType').value;
+    const looseQty = parseInt(document.getElementById('edLooseQty').value) || 0;
+    const minQty   = parseInt(document.getElementById('edMinQty').value) || 1;
+    const step     = parseInt(document.getElementById('edStep').value) || 1;
+
+    const payload = {
+      id, name: p.name, short_name: p.short || p.name.slice(0,4),
+      unit, stock_unit: stock, cat: p.cat,
+      box_type: boxType, loose_box_qty: looseQty,
+      per_box_default: looseQty || 1,
+      min_qty: minQty, step,
+      is_active: true,
+    };
+
+    let error;
+    if (existing) {
+      ({ error } = await sb.from('custom_products').update(payload).eq('id', id));
+    } else {
+      ({ error } = await sb.from('custom_products').insert(payload));
+    }
+    if (error) { showToast('❌ 儲存失敗：' + error.message); return; }
+
+    // Update cache
+    if (existing) {
+      const idx = cachedCustomProducts.findIndex(x => x.id === id);
+      if (idx >= 0) cachedCustomProducts[idx] = { ...cachedCustomProducts[idx], ...payload };
+    } else {
+      cachedCustomProducts.push(payload);
+    }
+    modal.remove();
+    showToast('✅ 已儲存「' + p.name + '」的設定');
+    rebuildProducts(); renderProductList(); renderAll();
+  };
 }
 
 // ── 預設品項：停用/啟用
@@ -1348,6 +1450,10 @@ function renderProductList() {
       </td>
       <td style="text-align:center;white-space:nowrap">
         ${!isDeleted ? `
+          <button onclick="editDefaultProduct(${p.id})"
+            style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">
+            ✏️ 編輯
+          </button>
           <button onclick="toggleDefaultProduct(${p.id},${isDisabled})"
             style="background:${isDisabled?'#f0fdf4':'#fff7ed'};color:${isDisabled?'var(--green)':'var(--orange)'};border:1px solid ${isDisabled?'#86efac':'#fdba74'};border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">
             ${isDisabled?ta('p8BtnEnable'):ta('p8BtnDisable')}

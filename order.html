@@ -587,7 +587,7 @@ async function doLogout() {
 async function loadUserAndStart(user) {
   // 載入角色
   const { data: profileData } = await sb.from('user_profiles')
-    .select('role, is_admin').eq('id', user.id).maybeSingle();
+    .select('role, is_admin, display_name').eq('id', user.id).maybeSingle();
   currentUserRole = profileData?.role || (profileData?.is_admin ? 'admin' : 'store');
   const nameInput = document.getElementById('submitterName');
   if (nameInput && profileData?.display_name) { nameInput.value = profileData.display_name; }
@@ -696,7 +696,8 @@ async function initMainApp(user, assignedStores) {
       if (p.box_type === 'loose' && p.loose_box_qty > 0) LOOSE_BOX[p.id] = p.loose_box_qty;
       else if (p.box_type === 'none') LOOSE_BOX[p.id] = 0;
     });
-    const enabledDefaults = DEFAULT_PRODUCTS.filter(p => !disabledDefaults.includes(p.id));
+    const cpOverrideIds = new Set((cpData || []).map(p => p.id));
+    const enabledDefaults = DEFAULT_PRODUCTS.filter(p => !disabledDefaults.includes(p.id) && !cpOverrideIds.has(p.id));
     PRODUCTS = [...enabledDefaults, ...activeCp.map(p => ({
       id: p.id, name: p.name, unit: p.unit || '箱', stockUnit: p.stock_unit || p.unit || '包',
       cat: p.cat || '冷凍', special: p.special || false, noBox: p.no_box || false,
