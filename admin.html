@@ -438,7 +438,6 @@ tr:hover td { background: #f8fafc; }
         </table>
       </div>
     </div>
-    <div class="section-card" style="margin-top:16px;border:2px solid var(--border)"><div class="section-header"><h3>ℹ️ 進階功能說明</h3></div><div style="padding:14px;font-size:13px;line-height:1.8;color:var(--muted)">🗑 <strong>刪除帳號</strong>：會自動刪除系統資料，Auth 認證記錄需另至 <a href="https://supabase.com/dashboard/project/jpabzycaqybbvebwewrt/auth/users" target="_blank" style="color:var(--primary)">Supabase Dashboard</a> 手動刪除，刪除後使用者才能用同 Email 重新申請。<br>🔑 <strong>重設密碼</strong>：點按鈕後寄出重設信，使用者點信中連結即可設定新密碼。</div></div>
     <!-- 資料清理 -->
     <div class="section-card" style="margin-top:16px">
       <div class="section-header"><h3>🗂 資料清理</h3><span style="font-size:12px;color:var(--muted)">定期清除舊訂單以維持資料庫效能</span></div>
@@ -1616,7 +1615,7 @@ async function loadUserList() {
         ${isSuperAdmin ? `
           <button onclick="resetUserPassword('${p.email}','${p.id}')" class="btn btn-sm" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;margin-bottom:3px">🔑 重設密碼</button>
           <button onclick="suspendUser('${p.id}','${p.email}')" class="btn btn-sm" style="background:#fff7ed;color:var(--orange);border:1px solid #fdba74;margin-bottom:3px">⏸ 停用</button>
-          <button onclick="deleteUser('${p.id}','${p.email}')" class="btn btn-sm" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5">🗑 刪除</button>
+          <button onclick="showDeleteSQL('${p.id}','${p.email}')" class="btn btn-sm" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5">🗑 刪除</button>
         ` : ''}
       </td>
     </tr>`;
@@ -1672,6 +1671,54 @@ async function deleteUser(userId, email) {
   await sb.from('user_profiles').delete().eq('id', userId);
   showToast(`✅ 已刪除 ${email} 的資料`);
   loadUserList();
+}
+
+function showDeleteSQL(userId, email) {
+  const sql =
+`-- 刪除帳號：${email}
+-- 請在 Supabase SQL Editor（postgres 角色）執行
+
+DELETE FROM user_store_access WHERE user_id = '${userId}';
+DELETE FROM user_profiles      WHERE id = '${userId}';
+DELETE FROM auth.users         WHERE id = '${userId}';`;
+
+  const existing = document.getElementById('deleteSQLModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'deleteSQLModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:12px;padding:22px;max-width:560px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.22)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+        '<h3 style="font-size:15px;font-weight:800;color:#dc2626">🗑 刪除帳號 SQL</h3>' +
+        '<button id="delSQLClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b">✕</button>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:10px">請複製以下代碼，貼入 <strong>Supabase → SQL Editor</strong> 執行。</div>' +
+      '<pre id="deleteSQLCode" style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:16px;font-size:12px;font-family:monospace;line-height:1.8;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0 0 14px">' + sql.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button id="delSQLCopy" style="flex:1;background:#1e293b;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">📋 複製代碼</button>' +
+        '<button id="delSQLCancel" style="background:#f1f5f9;color:#1e293b;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer">關閉</button>' +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(modal);
+  document.getElementById('delSQLClose').onclick  = () => modal.remove();
+  document.getElementById('delSQLCancel').onclick = () => modal.remove();
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.getElementById('delSQLCopy').onclick = () => {
+    navigator.clipboard.writeText(sql).then(() => {
+      const btn = document.getElementById('delSQLCopy');
+      btn.textContent = '✅ 已複製！';
+      setTimeout(() => { if (btn) btn.textContent = '📋 複製代碼'; }, 2000);
+    }).catch(() => {
+      const pre = document.getElementById('deleteSQLCode');
+      const range = document.createRange();
+      range.selectNode(pre);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(range);
+    });
+  };
 }
 
 // 保留相容舊版呼叫
