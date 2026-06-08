@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="手作訂貨">
+<title>手作訂貨系統</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #2563eb; --primary-dk: #1d4ed8;
+  --frozen: #0ea5e9; --ambient: #f59e0b;
+  --bg: #f1f5f9; --card: #fff; --border: #e2e8f0;
+  --text: #1e293b; --muted: #64748b;
+  --green: #16a34a; --red: #dc2626; --orange: #d97706;
+  --special: #7c3aed;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.header { background: var(--primary); color: #fff; padding: 14px 16px 10px; position: sticky; top: 0; z-index: 200; }
+.header-top { display: flex; align-items: center; justify-content: space-between; }
+.header h1 { font-size: 17px; font-weight: 800; }
+.deadline-badge { background: rgba(255,255,255,0.2); border-radius: 6px; padding: 3px 8px; font-size: 11px; font-weight: 700; }
+.deadline-badge.urgent { background: #ef4444; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+.header-sub { font-size: 12px; opacity: 0.8; margin-top: 4px; }
+.nav-tabs { display: flex; background: #1e40af; }
+.nav-tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.65); cursor: pointer; border-bottom: 3px solid transparent; }
+.nav-tab.active { color: #fff; border-bottom-color: #fff; }
+.setup-section { margin: 12px; }
+.setup-card { background: var(--card); border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.field label { font-size: 12px; color: var(--muted); font-weight: 700; display: block; margin-bottom: 5px; }
+.select-wrap { position: relative; }
+.select-wrap select { width: 100%; padding: 9px 30px 9px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; background: #fff; appearance: none; -webkit-appearance: none; }
+.select-wrap::after { content:'▾'; position:absolute; right:10px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; }
+.select-wrap select:focus { outline: none; border-color: var(--primary); }
+.delivery-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.delivery-badge { border-radius: 8px; padding: 9px 12px; text-align: center; }
+.delivery-badge.regular { background: #eff6ff; border: 1.5px solid #bfdbfe; }
+.delivery-badge.bread { background: #f5f3ff; border: 1.5px solid #c4b5fd; }
+.delivery-badge .db-label { font-size: 10px; font-weight: 800; color: var(--muted); margin-bottom: 3px; }
+.delivery-badge .db-date { font-size: 14px; font-weight: 800; }
+.delivery-badge.regular .db-date { color: var(--primary); }
+.delivery-badge.bread .db-date { color: var(--special); }
+.delivery-badge .db-note { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.info-row { background: #eff6ff; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #1e40af; line-height: 1.6; margin-top: 10px; }
+.special-notice { background: #f5f3ff; border: 1.5px solid #7c3aed; border-radius: 8px; padding: 9px 12px; font-size: 12px; color: var(--special); line-height: 1.5; margin: 8px 12px 0; }
+.cat-header { display: flex; align-items: center; gap: 8px; padding: 12px 14px 6px; font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+.cat-dot { width: 8px; height: 8px; border-radius: 50%; }
+.cat-dot.frozen { background: var(--frozen); }
+.cat-dot.ambient { background: var(--ambient); }
+.cat-dot.special { background: var(--special); }
+.col-headers { display: grid; grid-template-columns: 1fr 90px 90px; gap: 6px; padding: 0 12px 4px; }
+.col-header { font-size: 11px; color: var(--muted); font-weight: 700; text-align: center; }
+.col-header:first-child { text-align: left; }
+.product-card { background: var(--card); margin: 0 12px 8px; border-radius: 10px; padding: 10px 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1.5px solid transparent; }
+.product-card.has-order { border-color: var(--primary); }
+.product-card.special-item { border-color: var(--special); background: #faf5ff; }
+.product-card.special-item.has-order { background: #f5f0ff; }
+.prod-row { display: grid; grid-template-columns: 1fr 90px 90px; gap: 6px; align-items: center; }
+.prod-name { font-size: 14px; font-weight: 600; line-height: 1.3; }
+.prod-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.prod-code { color: #94a3b8; }
+.special-tag { display: inline-block; background: var(--special); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 4px; margin-left: 4px; vertical-align: middle; }
+.input-group { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.input-label-sm { font-size: 10px; color: var(--muted); font-weight: 600; }
+.qty-wrap { display: flex; align-items: center; gap: 3px; }
+.qty-btn { width: 28px; height: 28px; border: none; border-radius: 50%; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; user-select: none; -webkit-user-select: none; line-height: 1; }
+.qty-btn:active { transform: scale(0.88); }
+.qty-btn.minus { background: #fee2e2; color: var(--red); }
+.qty-btn.plus { background: #dbeafe; color: var(--primary-dk); }
+.qty-btn.special-plus { background: #ede9fe; color: var(--special); }
+.qty-input { width: 40px; text-align: center; font-size: 16px; font-weight: 700; border: none; background: transparent; color: var(--text); -moz-appearance: textfield; }
+.qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.qty-input:focus { outline: none; }
+.stock-input { width: 44px; text-align: center; font-size: 15px; font-weight: 600; border: 1.5px solid #cbd5e0; border-radius: 7px; background: #f8fafc; color: var(--text); padding: 4px 2px; -moz-appearance: textfield; }
+.stock-input::-webkit-outer-spin-button, .stock-input::-webkit-inner-spin-button { -webkit-appearance: none; }
+.stock-input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.stock-input:disabled { background: #f1f5f9; border-color: #e2e8f0; color: var(--muted); }
+.summary-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid var(--border); padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.08); }
+.summary-info strong { font-size: 15px; display: block; }
+.summary-info span { font-size: 12px; color: var(--muted); }
+.submit-btn { background: var(--primary); color: #fff; border: none; border-radius: 10px; padding: 11px 24px; font-size: 14px; font-weight: 700; cursor: pointer; }
+.submit-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+.submit-btn.submitted { background: var(--green); cursor: not-allowed; }
+.page-pad { height: 80px; }
+.toast { position: fixed; top: 90px; left: 50%; transform: translateX(-50%) translateY(-10px); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 300; opacity: 0; transition: all 0.25s; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.success-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 32px 20px; text-align: center; }
+.success-screen.show { display: flex; }
+.success-icon { font-size: 64px; margin-bottom: 16px; }
+.success-screen h2 { font-size: 22px; font-weight: 800; color: var(--green); }
+.success-screen p { color: var(--muted); font-size: 14px; line-height: 1.7; margin-top: 8px; }
+.new-order-btn { margin-top: 24px; background: var(--primary); color: #fff; border: none; border-radius: 10px; padding: 13px 28px; font-size: 15px; font-weight: 700; cursor: pointer; }
+.history-section { padding: 12px; }
+.history-empty { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 14px; }
+.history-card { background: var(--card); border-radius: 12px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); overflow: hidden; }
+.history-header { padding: 12px 14px; background: #f8fafc; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
+.history-header .week-label { font-size: 14px; font-weight: 700; }
+.history-header .submitted-time { font-size: 11px; color: var(--muted); }
+.history-body { padding: 12px 14px; display: none; }
+.history-body.open { display: block; }
+.history-item { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+.history-item:last-child { border-bottom: none; }
+.history-item .hqty { font-weight: 700; color: var(--primary); }
+.history-item .hstock { color: var(--muted); font-size: 12px; }
+.submitted-banner { margin: 8px 12px 0; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--green); font-weight: 700; text-align: center; }
+.loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.85); display: flex; align-items: center; justify-content: center; z-index: 999; font-size: 15px; color: var(--muted); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- 登入畫面 -->
+<div id="authScreen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#f1f5f9;padding:20px">
+  <div style="width:100%;max-width:360px">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:36px">🍱</div>
+      <div style="font-size:20px;font-weight:800;color:#1e293b;margin-top:8px">手作訂貨系統</div>
+    </div>
+    <!-- 分頁按鈕 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;background:#e2e8f0;border-radius:8px;padding:3px;margin-bottom:20px">
+      <button id="tabLoginBtn" onclick="switchAuthTab('login')"
+        style="padding:8px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;background:#fff;color:#1e293b;box-shadow:0 1px 3px rgba(0,0,0,0.1)">登入</button>
+      <button id="tabRegisterBtn" onclick="switchAuthTab('register')"
+        style="padding:8px;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;background:transparent;color:#64748b">申請帳號</button>
+    </div>
+    <!-- 登入表單 -->
+    <div id="formLogin" style="background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07)">
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">Email</label>
+        <input id="loginEmail" type="email" inputmode="email" placeholder="your@email.com"
+          style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">密碼</label>
+        <input id="loginPassword" type="password" placeholder="••••••••"
+          style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">
+      </div>
+      <button onclick="doLogin()" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">登入</button>
+      <div id="loginMsg" style="margin-top:10px;font-size:13px;text-align:center"></div>
+    </div>
+    <!-- 申請表單 -->
+    <div id="formRegister" style="display:none;background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07)">
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">姓名 *</label>
+        <input id="regName" type="text" placeholder="請輸入姓名"
+          style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">Email *</label>
+        <input id="regEmail" type="email" inputmode="email" placeholder="your@email.com"
+          style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">申請門市 *</label>
+        <div style="position:relative">
+          <select id="regStore"
+            style="width:100%;padding:10px 30px 10px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;background:#fff;appearance:none;-webkit-appearance:none">
+            <option value="">請選擇申請門市…</option>
+          </select>
+          <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#94a3b8;pointer-events:none">▾</span>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:3px">管理員開通帳號時的參考依據</div>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">密碼 * （至少 6 碼）</label>
+        <input id="regPassword" type="password" placeholder="••••••••"
+          style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">
+      </div>
+      <button onclick="doRegister()" style="width:100%;background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">送出申請</button>
+      <div id="registerMsg" style="margin-top:10px;font-size:13px;text-align:center"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 主畫面（登入後顯示） -->
+<div id="mainApp" style="display:none">
+<div class="header">
+  <div class="header-top">
+    <h1 id="hTitle">🍱 手作訂貨系統</h1>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onclick="toggleLang()" id="langBtn"
+        style="background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:800;cursor:pointer;letter-spacing:1px">
+        日本語
+      </button>
+      <div class="deadline-badge" id="deadlineBadge">每週一 10:00 截止</div>
+    </div>
+  </div>
+  <div class="header-sub" id="headerSub">請選擇門市</div>
+</div>
+<div class="nav-tabs">
+  <div class="nav-tab active" id="navOrder" onclick="switchNav('order')">本週訂貨</div>
+  <div class="nav-tab" id="navHistory" onclick="switchNav('history')">訂貨紀錄</div>
+  <div class="nav-tab" style="margin-left:auto;padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.6);cursor:pointer" onclick="doLogout()">登出</div>
+</div>
+
+
+<div id="pageOrder">
+  <div class="setup-section">
+    <div class="setup-card">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="field">
+          <label id="labelStore">門市</label>
+          <div class="select-wrap">
+            <select id="storeSelect" onchange="onStoreChange()">
+              <option value="" id="optPlaceholderStore">選擇門市…</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label id="labelName">訂貨人姓名 <span style="color:#ef4444">*</span></label>
+          <input id="submitterName" type="text" placeholder="請輸入姓名"
+            style="width:100%;padding:9px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:#fff"
+            oninput="updateSummary()">
+        </div>
+      </div>
+      <div class="delivery-info">
+        <div class="delivery-badge regular">
+          <div class="db-label">📦 一般品項配送日</div>
+          <div class="db-date" id="regularDeliveryDate">—</div>
+          <div class="db-note">本週四配送到門市</div>
+        </div>
+        <div class="delivery-badge bread">
+          <div class="db-label">🍞 餐包配送日</div>
+          <div class="db-date" id="breadDeliveryDate">—</div>
+          <div class="db-note">下週四配送（提前一週）</div>
+        </div>
+      </div>
+      <div class="info-row">
+        📦 訂貨以<strong>箱</strong>為單位，牛排鹽、青醬等以<strong>包</strong>為單位。<br>
+        ⏰ 請於週一上午 10:00 前送出，超時請在 LINE 群組告知。
+      </div>
+      <!-- 只盤點切換 -->
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;font-size:13px;font-weight:700;color:var(--text)">
+          <div id="inventoryToggle" onclick="toggleInventoryOnly()"
+            style="width:40px;height:22px;border-radius:11px;background:#d1d5db;position:relative;cursor:pointer;flex-shrink:0;transition:background 0.2s">
+            <div id="inventoryThumb"
+              style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>
+          </div>
+          <span id="inventoryOnlyLabel">📋 只盤點，不訂貨</span>
+        </label>
+        <span id="inventoryOnlyHint" style="font-size:11px;color:var(--muted)">開啟後可只提交庫存數量</span>
+      </div>
+    </div>
+  </div>
+  <div class="special-notice">
+    🍞 <strong>海鹽奶油餐包</strong>為代訂商品，央廚代向廠商採購：<strong>本週一下單 → 下週四配送</strong>。需提前一週，請務必本週一起下單！
+  </div>
+  <div id="submittedBanner" class="submitted-banner" style="display:none">✅ 本週已送出訂單，如需修改請聯絡總部</div>
+  <div id="lastWeekBreadBanner" style="display:none;margin:8px 12px 0;background:#eff6ff;border:1.5px solid #2563eb;border-radius:10px;padding:10px 14px;display:none">
+    <div style="font-size:12px;font-weight:800;color:#1d4ed8" id="lastWeekBreadBannerLabel">🍞 本週隨貨出貨餐包（上週已訂）</div>
+    <div style="font-size:22px;font-weight:900;color:#2563eb;margin:2px 0" id="lastWeekBreadBannerQty">0 包</div>
+    <div style="font-size:11px;color:#3b82f6">已納入本週出貨箱數預估</div>
+  </div>
+  <div id="productArea"></div>
+  <div class="page-pad"></div>
+</div>
+
+<div id="pageHistory" style="display:none">
+  <div class="history-section" id="historyContent"></div>
+</div>
+
+<div class="success-screen" id="successScreen">
+  <div class="success-icon">✅</div>
+  <h2 id="hSuccess">訂單送出成功！</h2>
+  <p id="successDetail">訂單已送出</p>
+  <button class="new-order-btn" id="btnBack" onclick="resetAndBack()">返回主頁</button>
+</div>
+
+<div id="minBoxWarnBar" style="display:none;background:#fff7ed;border-top:2px solid #f59e0b;padding:6px 14px;font-size:12px;color:#92400e;font-weight:700;text-align:center"></div>
+<div class="summary-bar" id="summaryBar">
+  <div class="summary-info">
+    <strong id="summaryText">請先選擇門市</strong>
+    <span id="summaryDetail">共 0 種品項</span>
+  </div>
+  <button class="submit-btn" id="submitBtn" onclick="submitOrder()" disabled>送出訂單</button>
+</div>
+
+<div class="toast" id="toast"></div>
+</div><!-- end #mainApp -->
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// ========================
+// Supabase 設定
+// ========================
+const SUPABASE_URL = 'https://jpabzycaqybbvebwewrt.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_nNp7DYbaTBtWm39agYBczg_c1sR7-4F';
+let sb;
+
+// ========================
+// 商品資料
+// ========================
+const DEFAULT_PRODUCTS = [
+  { id: 792,  name: '大阪燒',               unit: '箱', stockUnit: '片',   cat: '冷凍' },
+  { id: 984,  name: '馬鈴薯燉肉',           unit: '箱', stockUnit: '人份', cat: '冷凍' },
+  { id: 908,  name: '韓式拌飯醬（360g/袋）', unit: '箱', stockUnit: '袋',   cat: '冷凍' },
+  { id: 1047, name: '冷凍義大利麵',          unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 251,  name: '壽喜燒醬（1000克/包）', unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 1198, name: '紅椒包 250g/包',        unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 1199, name: '黃椒包 250g/包',        unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 1161, name: '手作五花叉燒',          unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 735,  name: '咖哩醬（150克/包）',    unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 262,  name: '北海道白醬',            unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 261,  name: '南瓜湯',                unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 1154, name: '起司醬',                unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 1254, name: '拿坡里醬',              unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 1050, name: '義式香蒜醬',            unit: '包', stockUnit: '包',   cat: '冷凍', minQty: 10, step: 10 },
+  { id: 1214, name: '1/2咖哩醬',             unit: '箱', stockUnit: '包',   cat: '冷凍' },
+  { id: 1282, name: '北海道燉菜',            unit: '箱', stockUnit: '人份', cat: '冷凍' },
+  { id: 1283, name: '手作青醬（140g/包）',   unit: '包', stockUnit: '包',   cat: '冷凍', minQty: 10, step: 10 },
+  { id: 1315, name: '天婦羅蝦',              unit: '箱', stockUnit: '支',   cat: '冷凍' },
+  { id: 1368, name: '天婦羅碎 500g/包',      unit: '包', stockUnit: '包',   cat: '冷凍' },
+  { id: 1051, name: '牛排鹽',                unit: '包', stockUnit: '包',   cat: '常温', minQty: 5, step: 5 },
+  { id: 1142, name: '綠哈密瓜糖漿 2.5KG',   unit: '罐', stockUnit: '罐',   cat: '常温', noBox: true },
+  { id: 1367, name: '海鹽奶油餐包 12個±2/包', unit: '包', stockUnit: '包', cat: '代訂', special: true },
+];
+let PRODUCTS = [...DEFAULT_PRODUCTS];
+
+// 散裝箱數設定（動態）
+const LOOSE_BOX_DEFAULT = { 1051:0, 1368:10, 1367:6, 1142:6, 1283:100, 1050:200 };
+let LOOSE_BOX = { ...LOOSE_BOX_DEFAULT };
+
+// 門市代號對照
+const STORE_CODES_MAP = {
+  '台中米平方':'00002','土城日月光':'00003','高雄成功':'00006','台南中正':'00007',
+  '台北內湖':'00008','龜山文青':'00009','台南安平':'00010','土城家樂福':'00011',
+  '台南新仁':'00012','桃園經國':'00013','台南仁德':'00014','高雄新楠':'00015',
+  '嘉義嘉義':'00016','台南新營':'00017','台南東門':'00018','台北車站':'00019',
+  '雲林斗六':'00020','宜蘭店':'00021','內壢':'00022','南投家樂福':'00023',
+  '大樂':'00024','新店碧潭':'00025','台中西屯':'00026','台中文心':'00027',
+  '小港漢民':'00028','新店家樂福':'00029','大全聯':'00030','南投埔里':'00031',
+  '台中大里':'00032','台中青海':'00033','高雄光華':'00034','三重溪尾':'00036',
+  '小碧潭京站':'00037',
+};
+
+// ========================
+// 日文品項名稱（請確認正確性）
+// ========================
+const PRODUCT_NAMES_JA = {
+  792:  'お好み焼き',
+  984:  '肉じゃが',
+  908:  'ビビンバソース',
+  1047: '冷凍パスタ',
+  251:  'すき焼きソース',
+  1198: '赤パプリカ',
+  1199: '黄パプリカ',
+  1161: '手作り豚バラチャーシュー',
+  735:  'カレーソース',
+  262:  '北海道ホワイトソース',
+  261:  'かぼちゃスープ',
+  1154: 'チーズソース',
+  1254: 'ナポリソース',
+  1050: 'ガーリックオイルソース',
+  1214: 'ハーフカレーソース',
+  1282: '北海道シチュー',
+  1283: '手作りジェノベーゼ',
+  1315: '天ぷら海老',
+  1368: '天かす',
+  1051: 'ステーキソルト',
+  1142: 'グリーンメロンシロップ',
+  1367: '塩バターロール',
+};
+
+// ========================
+// i18n
+// ========================
+const T = {
+  zh: {
+    title:'手作訂貨系統', deadlineNormal:'每週一 10:00 截止', deadlineUrgent:'⚠️ 截止倒數中！', deadlinePast:'❌ 已截止',
+    navOrder:'本週訂貨', navHistory:'訂貨紀錄',
+    labelStore:'門市', labelName:'訂貨人姓名', placeholderStore:'選擇門市…', placeholderName:'請輸入姓名',
+    regularLabel:'📦 一般品項配送日', regularNote:'本週四配送到門市',
+    breadLabel:'🍞 餐包配送日', breadNote:'下週四配送（提前一週）',
+    infoText:'訂貨以<strong>箱</strong>為單位，牛排鹽、青醬等以<strong>包</strong>為單位。<br>⏰ 請於週一上午 10:00 前送出。',
+    breadNotice:'🍞 <strong>海鹽奶油餐包</strong>為代訂商品：<strong>本週一下單 → 下週四配送</strong>。',
+    submittedBanner:'✅ 本週已送出訂單，如需修改請聯絡總部',
+    colStock:'盤點數量', colOrder:'訂貨數量',
+    catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代訂商品（下週四配送）',
+    tagSpecial:'代訂', tagUnit:'單位：', tagStockUnit:'盤點：', tagOrderUnit:'訂貨：',
+    btnSubmit:'送出訂單', btnSubmitting:'送出中…', btnSubmitted:'已送出', btnBack:'返回主頁',
+    successTitle:'訂單送出成功！', toastStore:'請先選擇門市',
+    toastName:'請輸入訂貨人姓名', toastItem:'請至少訂一項商品', toastFail:'❌ 送出失敗，請重試',
+    historyEmpty:'請先選擇門市以查看紀錄', historyNone:'尚無訂貨紀錄', historyLoading:'⏳ 載入中…',
+    historyBy:'提交：', historyStock:'盤點', historyOrder:'訂',
+    langSwitch:'日本語',
+    summaryItems:'種品項', summaryBoxes:'預估', summaryDefault:'請先選擇門市',
+    lastWeekBreadLabel:'🍞 本週隨貨出貨餐包（上週已訂）',
+    historyNotOrdered:'　未訂',
+    inventoryOnlyLabel:'📋 只盤點，不訂貨',
+    inventoryOnlyHint:'開啟後可只提交庫存數量',
+    btnInventorySubmit:'送出盤點',
+    btnUnlock:'🔓 解鎖修改',
+    btnViewOnly:'查看模式',
+    waitingStoreTitle:'等待門市指派',
+    waitingStoreMsg:'帳號已驗證，請等待總部指派可訂購的門市。<br>指派完成後重新整理頁面即可使用。',
+    waitingStoreBtn:'登出',
+    minBoxWarn:'⚠️ 預估 {boxes} 箱，未達最低出貨量 {min} 箱，運費仍以 {min} 箱計算',
+    breadNextWeek:'　＋下週餐包 {qty} 包',
+  },
+  ja: {
+    title:'手作発注システム', deadlineNormal:'毎週月曜 10:00 締め切り', deadlineUrgent:'⚠️ 締め切り間近！', deadlinePast:'❌ 締め切り済み',
+    navOrder:'今週の発注', navHistory:'発注履歴',
+    labelStore:'店舗', labelName:'発注担当者名', placeholderStore:'店舗を選択…', placeholderName:'お名前を入力',
+    regularLabel:'📦 通常商品 納品日', regularNote:'今週木曜日に配送',
+    breadLabel:'🍞 塩バターロール 納品日', breadNote:'来週木曜日（1週間前に発注）',
+    infoText:'発注単位は主に<strong>箱</strong>です。ステーキソルト等は<strong>袋</strong>単位です。<br>⏰ 月曜10:00までにご送信ください。',
+    breadNotice:'🍞 <strong>塩バターロール</strong>は代理注文商品：<strong>今週月曜発注 → 来週木曜配送</strong>。1週間前の発注が必要です！',
+    submittedBanner:'✅ 今週の発注を送信済みです。変更はご連絡ください。',
+    colStock:'在庫数量', colOrder:'発注数量',
+    catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代理注文商品（来週木曜配送）',
+    tagSpecial:'代理注文', tagUnit:'単位：', tagStockUnit:'在庫：', tagOrderUnit:'発注：',
+    btnSubmit:'発注を送信', btnSubmitting:'送信中…', btnSubmitted:'送信済み', btnBack:'トップへ戻る',
+    successTitle:'発注が完了しました！', toastStore:'店舗を選択してください',
+    toastName:'担当者名を入力してください', toastItem:'商品を1つ以上選択してください', toastFail:'❌ 送信に失敗しました',
+    historyEmpty:'店舗を選択して履歴を確認', historyNone:'発注履歴がありません', historyLoading:'⏳ 読み込み中…',
+    historyBy:'担当者：', historyStock:'在庫', historyOrder:'発注',
+    historyNotOrdered:'　未発注',
+    langSwitch:'中文',
+    summaryItems:'品目', summaryBoxes:'推定', summaryDefault:'店舗を選択してください',
+    lastWeekBreadLabel:'🍞 今週同梱出荷 塩バターロール（先週発注済）',
+    inventoryOnlyLabel:'📋 棚卸のみ・発注なし',
+    inventoryOnlyHint:'ONにすると在庫数のみ送信可能',
+    btnInventorySubmit:'棚卸データを送信',
+    btnUnlock:'🔓 ロック解除して再編集',
+    btnViewOnly:'閲覧のみ',
+    waitingStoreTitle:'店舗指定待ち',
+    waitingStoreMsg:'アカウントは認証済みです。本部から店舗が指定されるまでお待ちください。<br>指定後にページを更新すると使用可能になります。',
+    waitingStoreBtn:'ログアウト',
+    minBoxWarn:'⚠️ 推定 {boxes} 箱。最低出荷数 {min} 箱に未達。運賃は {min} 箱で計算されます',
+    breadNextWeek:'　＋来週パン {qty} 袋',
+  }
+};
+
+let currentLang = 'zh';
+
+function t(key) {
+  const v = T[currentLang]?.[key];
+  if (v !== undefined && v !== null) return v;
+  const zh = T.zh[key];
+  return (zh !== undefined && zh !== null) ? zh : key;
+}
+
+function toggleLang() {
+  currentLang = currentLang === 'zh' ? 'ja' : 'zh';
+  applyLang();
+}
+
+function applyLang() {
+  const l = T[currentLang];
+  document.getElementById('hTitle').textContent = '🍱 ' + l.title;
+  document.getElementById('langBtn').textContent = l.langSwitch;
+  document.getElementById('deadlineBadge').textContent = l.deadlineNormal;
+  document.getElementById('navOrder').textContent = l.navOrder;
+  document.getElementById('navHistory').textContent = l.navHistory;
+  document.getElementById('labelStore').innerHTML = l.labelStore;
+  document.getElementById('labelName').innerHTML = `${l.labelName} <span style="color:#ef4444">*</span>`;
+  document.getElementById('submitterName').placeholder = l.placeholderName;
+  document.querySelector('#storeSelect option[value=""]').textContent = l.placeholderStore;
+  document.querySelector('.delivery-badge.regular .db-label').textContent = l.regularLabel;
+  document.querySelector('.delivery-badge.regular .db-note').textContent = l.regularNote;
+  document.querySelector('.delivery-badge.bread .db-label').textContent = l.breadLabel;
+  document.querySelector('.delivery-badge.bread .db-note').textContent = l.breadNote;
+  document.querySelector('.info-row').innerHTML = l.infoText;
+  document.querySelector('.special-notice').innerHTML = l.breadNotice;
+  const banner = document.getElementById('submittedBanner');
+  if (banner) banner.textContent = l.submittedBanner;
+  const btn = document.getElementById('submitBtn');
+  if (btn && !isSubmitted) btn.textContent = l.btnSubmit;
+  // 只盤點切換標籤
+  const invLabel = document.getElementById('inventoryOnlyLabel');
+  if (invLabel) invLabel.textContent = l.inventoryOnlyLabel;
+  const invHint = document.getElementById('inventoryOnlyHint');
+  if (invHint) invHint.textContent = l.inventoryOnlyHint;
+  checkDeadline();
+  renderProducts();
+  renderLastWeekBread();
+  updateSummary();
+}
+
+// ========================
+// 日期計算
+// ========================
+// 當前使用者角色（從 user_profiles 載入）
+let currentUserRole = 'store';
+
+function getThisMonday() {
+  const now = new Date(); const day = now.getDay();
+  const mon = new Date(now); mon.setDate(now.getDate() - (day===0?6:day-1)); mon.setHours(0,0,0,0); return mon;
+}
+// 週四（含）之後自動切換到下週訂貨
+function getOrderWeekMonday() {
+  const mon = getThisMonday();
+  const day = new Date().getDay(); // 0=日,1=一,...,4=四,5=五,6=六
+  if (day === 0 || day >= 4) mon.setDate(mon.getDate() + 7);
+  return mon;
+}
+function getThursday(mon, weeksAhead=0) { const d=new Date(mon); d.setDate(d.getDate()+weeksAhead*7+3); return d; }
+function fmtDate(d) { return `${d.getMonth()+1}/${d.getDate()}（${['日','一','二','三','四','五','六'][d.getDay()]}）`; }
+function fmtShort(d) { return `${d.getMonth()+1}/${d.getDate()}`; }
+function localISODate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+
+// ========================
+// State
+// ========================
+let currentStore = '';
+let currentWeek = '';
+let orderData = {};
+let isSubmitted = false;
+let lastWeekBreadQty = 0;    // 上週餐包訂購量（本週隨貨出貨）
+let minBoxesSettings = {};   // { store_key: 最低箱數 }
+let inventoryOnly = false;   // 只盤點模式
+
+const MIN_BOXES_DEFAULT = 4;
+const MIN_BOXES_INIT = { '新店碧潭':6, '新店家樂福':6, '宜蘭店':6, '南投埔里':6, '南投家樂福':6 };
+function getStoreMinBoxes() {
+  const s = { ...MIN_BOXES_INIT, ...minBoxesSettings };
+  return s[currentStore] ?? MIN_BOXES_DEFAULT;
+}
+
+// ========================
+// Auth UI
+// ========================
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('formLogin').style.display    = isLogin ? 'block' : 'none';
+  document.getElementById('formRegister').style.display = isLogin ? 'none' : 'block';
+  document.getElementById('tabLoginBtn').style.background    = isLogin ? '#fff' : 'transparent';
+  document.getElementById('tabLoginBtn').style.color         = isLogin ? '#1e293b' : '#64748b';
+  document.getElementById('tabLoginBtn').style.boxShadow     = isLogin ? '0 1px 3px rgba(0,0,0,0.1)' : 'none';
+  document.getElementById('tabRegisterBtn').style.background = isLogin ? 'transparent' : '#fff';
+  document.getElementById('tabRegisterBtn').style.color      = isLogin ? '#64748b' : '#1e293b';
+  document.getElementById('tabRegisterBtn').style.boxShadow  = isLogin ? 'none' : '0 1px 3px rgba(0,0,0,0.1)';
+}
+
+async function doLogin() {
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const msg      = document.getElementById('loginMsg');
+  if (!email || !password) { msg.style.color='#dc2626'; msg.textContent='請填寫 Email 和密碼'; return; }
+  msg.style.color='#64748b'; msg.textContent='登入中…';
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    msg.style.color='#dc2626';
+    msg.textContent='登入失敗：' + (error.message.includes('Invalid') ? 'Email 或密碼錯誤' : error.message);
+    return;
+  }
+  await loadUserAndStart(data.user);
+}
+
+async function doRegister() {
+  const name           = document.getElementById('regName').value.trim();
+  const email          = document.getElementById('regEmail').value.trim();
+  const requestedStore = document.getElementById('regStore').value;
+  const password       = document.getElementById('regPassword').value;
+  const msg            = document.getElementById('registerMsg');
+  if (!name)           { msg.style.color='#dc2626'; msg.textContent='請填寫姓名'; return; }
+  if (!email)          { msg.style.color='#dc2626'; msg.textContent='請填寫 Email'; return; }
+  if (!requestedStore) { msg.style.color='#dc2626'; msg.textContent='請選擇申請門市'; return; }
+  if (password.length < 6) { msg.style.color='#dc2626'; msg.textContent='密碼至少 6 碼'; return; }
+  msg.style.color='#64748b'; msg.textContent='送出中…';
+  const { data: signUpData, error } = await sb.auth.signUp({
+    email, password,
+    options: { data: { display_name: name, requested_store: requestedStore } }
+  });
+  if (error) { msg.style.color='#dc2626'; msg.textContent='申請失敗：' + error.message; return; }
+  if (signUpData?.user) {
+    await sb.from('user_profiles').upsert({
+      id: signUpData.user.id, email, display_name: name,
+      requested_store: requestedStore, is_admin: false,
+    }, { onConflict: 'id' });
+  }
+  msg.style.color='#16a34a';
+  msg.textContent=`✅ 驗證信已寄出！申請門市：${requestedStore}。請點擊信件中的連結完成驗證後即可登入。`;
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginMsg').textContent = '';
+}
+
+async function loadUserAndStart(user) {
+  // 載入角色
+  const { data: profileData } = await sb.from('user_profiles')
+    .select('role, is_admin').eq('id', user.id).maybeSingle();
+  currentUserRole = profileData?.role || (profileData?.is_admin ? 'admin' : 'store');
+  const nameInput = document.getElementById('submitterName');
+  if (nameInput && profileData?.display_name) { nameInput.value = profileData.display_name; }
+
+  // 載入被指派的門市
+  const { data: accessData } = await sb.from('user_store_access')
+    .select('store_key').eq('user_id', user.id);
+  const assignedStores = (accessData || []).map(r => r.store_key);
+
+  if (!assignedStores.length) {
+    // 尚未指派門市
+    document.getElementById('authScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    document.getElementById('pageOrder').innerHTML = `
+      <div style="padding:48px 20px;text-align:center;color:#64748b">
+        <div style="font-size:48px;margin-bottom:12px">⏳</div>
+        <div style="font-size:16px;font-weight:700;color:#1e293b;margin-bottom:8px">等待門市指派</div>
+        <div style="font-size:13px;line-height:1.7">帳號已驗證，請等待總部指派可訂購的門市。<br>指派完成後重新整理頁面即可使用。</div>
+        <button onclick="doLogout()" style="margin-top:24px;background:#e2e8f0;border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:700;cursor:pointer">登出</button>
+      </div>`;
+    document.getElementById('summaryBar').style.display = 'none';
+    document.getElementById('minBoxWarnBar').style.display = 'none';
+    return;
+  }
+
+  // 有指派門市 → 啟動主畫面
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  await initMainApp(user, assignedStores);
+}
+
+// ========================
+// Init
+// ========================
+async function init() {
+  const { createClient } = window.supabase;
+  sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  // 只監聽登出事件
+  sb.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_OUT') {
+      document.getElementById('authScreen').style.display = 'flex';
+      document.getElementById('mainApp').style.display = 'none';
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
+      document.getElementById('loginMsg').textContent = '';
+    }
+  });
+
+  // 填充申請表單門市下拉（連動後台停用設定）
+  const regSel = document.getElementById('regStore');
+  if (regSel) {
+    try {
+      const [{ data: dsData }, { data: customStores }] = await Promise.all([
+        sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
+        sb.from('custom_stores').select('code, key, is_active'),
+      ]);
+      const disabled = dsData?.value || [];
+      Object.keys(STORE_CODES_MAP).filter(key => !disabled.includes(key)).forEach(key => {
+        const o = document.createElement('option');
+        o.value = key; o.textContent = `${STORE_CODES_MAP[key]} ${key}`;
+        regSel.appendChild(o);
+      });
+      (customStores || []).filter(s => s.is_active && !disabled.includes(s.key)).forEach(s => {
+        const o = document.createElement('option');
+        o.value = s.key; o.textContent = `${s.code} ${s.key}`;
+        regSel.appendChild(o);
+      });
+    } catch(e) {
+      Object.keys(STORE_CODES_MAP).forEach(key => {
+        const o = document.createElement('option');
+        o.value = key; o.textContent = `${STORE_CODES_MAP[key]} ${key}`;
+        regSel.appendChild(o);
+      });
+    }
+  }
+
+  // 檢查是否已有 session
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    document.getElementById('authScreen').style.display = 'flex';
+    document.getElementById('mainApp').style.display = 'none';
+    return;
+  }
+  await loadUserAndStart(session.user);
+}
+
+async function initMainApp(user, assignedStores) {
+  // 載入門市清單（預設 + Supabase 自訂）
+  const ss = document.getElementById('storeSelect');
+  ss.innerHTML = '<option value="" id="optPlaceholderStore">選擇門市…</option>';
+  try {
+    const [{ data: customStores }, { data: dsData }, { data: mbData }, { data: cpData }, { data: ddpData }] = await Promise.all([
+      sb.from('custom_stores').select('code, key, is_active'),
+      sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
+      sb.from('settings').select('value').eq('key','min_boxes_settings').maybeSingle(),
+      sb.from('custom_products').select('*').eq('is_active', true).order('id'),
+      sb.from('settings').select('value').eq('key','disabled_default_products').maybeSingle(),
+    ]);
+    minBoxesSettings = mbData?.value || {};
+    const disabled = dsData?.value || [];
+    const disabledDefaults = ddpData?.value || [];
+    const activeCp = (cpData || []).filter(p => p.is_active !== false);
+    LOOSE_BOX = { ...LOOSE_BOX_DEFAULT };
+    activeCp.forEach(p => {
+      if (p.box_type === 'loose' && p.loose_box_qty > 0) LOOSE_BOX[p.id] = p.loose_box_qty;
+      else if (p.box_type === 'none') LOOSE_BOX[p.id] = 0;
+    });
+    const enabledDefaults = DEFAULT_PRODUCTS.filter(p => !disabledDefaults.includes(p.id));
+    PRODUCTS = [...enabledDefaults, ...activeCp.map(p => ({
+      id: p.id, name: p.name, unit: p.unit || '箱', stockUnit: p.stock_unit || p.unit || '包',
+      cat: p.cat || '冷凍', special: p.special || false, noBox: p.no_box || false,
+      minQty: p.min_qty > 1 ? p.min_qty : undefined, step: p.step > 1 ? p.step : undefined,
+    }))];
+
+    // 預設門市
+    const defaultStores = [
+      {key:'台中米平方',code:'00002'},{key:'土城日月光',code:'00003'},{key:'高雄成功',code:'00006'},
+      {key:'台南中正',code:'00007'},{key:'台北內湖',code:'00008'},{key:'龜山文青',code:'00009'},
+      {key:'台南安平',code:'00010'},{key:'土城家樂福',code:'00011'},{key:'台南新仁',code:'00012'},
+      {key:'桃園經國',code:'00013'},{key:'台南仁德',code:'00014'},{key:'高雄新楠',code:'00015'},
+      {key:'嘉義嘉義',code:'00016'},{key:'台南新營',code:'00017'},{key:'台南東門',code:'00018'},
+      {key:'台北車站',code:'00019'},{key:'雲林斗六',code:'00020'},{key:'宜蘭店',code:'00021'},
+      {key:'內壢',code:'00022'},{key:'南投家樂福',code:'00023'},{key:'大樂',code:'00024'},
+      {key:'新店碧潭',code:'00025'},{key:'台中西屯',code:'00026'},{key:'台中文心',code:'00027'},
+      {key:'小港漢民',code:'00028'},{key:'新店家樂福',code:'00029'},{key:'大全聯',code:'00030'},
+      {key:'南投埔里',code:'00031'},{key:'台中大里',code:'00032'},{key:'台中青海',code:'00033'},
+      {key:'高雄光華',code:'00034'},{key:'三重溪尾',code:'00036'},{key:'小碧潭京站',code:'00037'},
+    ];
+    const customActive = (customStores||[]).filter(s=>s.is_active).map(s=>({key:s.key,code:s.code}));
+    // 只顯示被指派的門市（assignedStores）
+    const allStores = [...defaultStores, ...customActive]
+      .filter(s => !disabled.includes(s.key) && assignedStores.includes(s.key));
+
+    allStores.forEach(s => {
+      const o = document.createElement('option');
+      o.value = s.key;
+      o.textContent = `${s.code} ${s.key}`;
+      ss.appendChild(o);
+    });
+
+    // 只有一家門市 → 自動選取並鎖定
+    if (allStores.length === 1) {
+      ss.value = allStores[0].key;
+      ss.disabled = true;
+      ss.style.background = '#f1f5f9';
+      onStoreChange();
+    }
+  } catch(e) {
+    console.error('載入門市清單失敗', e);
+    assignedStores.forEach(key => {
+      const o = document.createElement('option'); o.value = key; o.textContent = key; ss.appendChild(o);
+    });
+  }
+
+  const thisMonday = getOrderWeekMonday();
+  currentWeek = localISODate(thisMonday);
+  const regularDel = getThursday(thisMonday, 0);
+  const breadDel   = getThursday(thisMonday, 1);
+  document.getElementById('regularDeliveryDate').textContent = fmtDate(regularDel);
+  document.getElementById('breadDeliveryDate').textContent   = fmtDate(breadDel);
+  checkDeadline();
+  renderProducts();
+}
+
+function checkDeadline() {
+  const now = new Date(); const day = now.getDay(); const hour = now.getHours();
+  const badge = document.getElementById('deadlineBadge');
+  if (day===1 && hour>=8 && hour<10) { badge.textContent=t('deadlineUrgent'); badge.classList.add('urgent'); }
+  else if (day===1 && hour>=10) { badge.textContent=t('deadlinePast'); badge.classList.add('urgent'); }
+  else { badge.textContent=t('deadlineNormal'); badge.classList.remove('urgent'); }
+}
+
+function onStoreChange() {
+  currentStore = document.getElementById('storeSelect').value;
+  const thisMonday = getOrderWeekMonday();
+  const del = getThursday(thisMonday, 0);
+  document.getElementById('headerSub').textContent = currentStore ? `${currentStore}　配送日 ${fmtShort(del)}` : '請選擇門市';
+  loadOrderState();
+}
+
+async function loadOrderState() {
+  if (!currentStore || !currentWeek) return;
+  const btn = document.getElementById('submitBtn');
+
+  // 計算上週日期
+  const lastWeekDate = new Date(currentWeek);
+  lastWeekDate.setDate(lastWeekDate.getDate() - 7);
+  const lastWeekKey = localISODate(lastWeekDate);
+
+  const [{ data }, { data: lastData }] = await Promise.all([
+    sb.from('orders').select('*').eq('store_key', currentStore).eq('week_date', currentWeek).maybeSingle(),
+    sb.from('orders').select('data').eq('store_key', currentStore).eq('week_date', lastWeekKey).maybeSingle(),
+  ]);
+
+  // 上週餐包量（本週隨貨出貨）
+  lastWeekBreadQty = lastData?.data?.[1367]?.order || 0;
+
+  const canUnlock = ['admin','manager'].includes(currentUserRole);
+  const canSubmit = ['admin','manager','store'].includes(currentUserRole);
+
+  if (data) {
+    orderData = data.data || {};
+    isSubmitted = true;
+    document.getElementById('submittedBanner').style.display = 'block';
+    // manager/admin 可看到解鎖按鈕；viewer 只能看
+    if (canUnlock) {
+      btn.textContent = '🔓 解鎖修改'; btn.className = 'submit-btn'; btn.disabled = false;
+      btn.onclick = () => unlockOrder();
+    } else {
+      btn.textContent = '已送出'; btn.className = 'submit-btn submitted'; btn.disabled = true;
+      btn.onclick = null;
+    }
+  } else {
+    orderData = {};
+    isSubmitted = false;
+    document.getElementById('submittedBanner').style.display = 'none';
+    if (canSubmit) {
+      btn.textContent = '送出訂單'; btn.className = 'submit-btn'; btn.disabled = true;
+      btn.onclick = () => submitOrder();
+    } else {
+      // viewer
+      btn.textContent = '查看模式'; btn.className = 'submit-btn submitted'; btn.disabled = true;
+      btn.onclick = null;
+    }
+  }
+  renderProducts();
+  renderLastWeekBread();
+  updateSummary();
+}
+
+function unlockOrder() {
+  if (!confirm(`確定解鎖「${currentStore}」本週訂單並重新編輯？`)) return;
+  isSubmitted = false;
+  document.getElementById('submittedBanner').style.display = 'none';
+  const btn = document.getElementById('submitBtn');
+  btn.textContent = '送出訂單'; btn.className = 'submit-btn'; btn.disabled = true;
+  btn.onclick = () => submitOrder();
+  showToast('✅ 已解鎖，可重新編輯並送出');
+  renderProducts();
+  updateSummary();
+}
+
+// ========================
+// Render Products
+// ========================
+function renderProducts() {
+  const area = document.getElementById('productArea');
+  const groups = [
+    { label:t('catFrozen'),  cat:'冷凍', dotClass:'frozen' },
+    { label:t('catAmbient'), cat:'常温', dotClass:'ambient' },
+    { label:t('catSpecial'), cat:'代訂', dotClass:'special' },
+  ];
+  let html = `<div class="col-headers" style="margin-top:10px">
+    <div class="col-header">品項</div>
+    <div class="col-header">${t('colStock')}</div>
+    <div class="col-header">${t('colOrder')}</div>
+  </div>`;
+  groups.forEach(g => {
+    const prods = PRODUCTS.filter(p => p.cat === g.cat);
+    if (!prods.length) return;
+    html += `<div class="cat-header"><div class="cat-dot ${g.dotClass}"></div>${g.label}</div>`;
+    prods.forEach(p => {
+      const d = orderData[p.id] || { stock:'', order:0 };
+      const hasOrder = (d.order||0) > 0;
+      const isSpecial = p.special;
+      const displayName = currentLang === 'ja' && PRODUCT_NAMES_JA[p.id] ? PRODUCT_NAMES_JA[p.id] : p.name;
+      const cardClass = `product-card${isSpecial?' special-item':''}${hasOrder?' has-order':''}`;
+      const plusClass = isSpecial ? 'qty-btn plus special-plus' : 'qty-btn plus';
+      const disabled = (isSubmitted || inventoryOnly) ? 'disabled' : '';
+      html += `
+      <div class="${cardClass}" id="card_${p.id}">
+        <div class="prod-row">
+          <div>
+            <div class="prod-name">${displayName}${isSpecial?`<span class="special-tag">${t('tagSpecial')}</span>`:''}</div>
+            <div class="prod-meta"><span class="prod-code">#${p.id}</span> · ${t('tagOrderUnit')}${p.unit}　${t('tagStockUnit')}${p.stockUnit||p.unit}${p.minQty?`　<span style="color:#d97706;font-weight:700">最低${p.minQty}，${p.step}的倍數</span>`:''}</div>
+          </div>
+          <div class="input-group">
+            <div class="input-label-sm">${t('tagStockUnit')}${p.stockUnit||p.unit}</div>
+            <input class="stock-input" type="number" inputmode="numeric" min="0" id="stock_${p.id}"
+              value="${d.stock!==''?d.stock:''}" placeholder="" onchange="setStock(${p.id},this.value)" ${disabled}>
+          </div>
+          <div class="input-group">
+            <div class="input-label-sm">${t('tagOrderUnit')}${p.unit}</div>
+            <div class="qty-wrap">
+              <button class="qty-btn minus" ontouchstart="" onclick="changeOrder(${p.id},-1)" ${disabled}>−</button>
+              <input class="qty-input" type="number" min="0" id="order_${p.id}"
+                value="${d.order||0}" onchange="setOrder(${p.id},this.value)" ${disabled}>
+              <button class="${plusClass}" ontouchstart="" onclick="changeOrder(${p.id},1)" ${disabled}>+</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    });
+  });
+  area.innerHTML = html;
+}
+
+function getProductRule(id) {
+  const p = PRODUCTS.find(x => x.id === id);
+  return { min: p?.minQty || 1, step: p?.step || 1 };
+}
+
+function setStock(id, val) {
+  if (!orderData[id]) orderData[id] = { stock:'', order:0 };
+  orderData[id].stock = parseInt(val) || '';
+}
+function setOrder(id, val) {
+  if (!currentStore) { showToast('請先選擇門市'); return; }
+  if (!orderData[id]) orderData[id] = { stock:'', order:0 };
+  const { min, step } = getProductRule(id);
+  let n = Math.max(0, parseInt(val)||0);
+  if (n > 0) {
+    n = Math.round(n / step) * step;   // 修正為倍數
+    if (n < min) n = min;              // 不低於最低量
+  }
+  orderData[id].order = n;
+  const input = document.getElementById(`order_${id}`); if(input) input.value = n;
+  const card = document.getElementById(`card_${id}`); if(card) card.classList.toggle('has-order', n>0);
+  updateSummary();
+}
+function changeOrder(id, delta) {
+  if (!currentStore) { showToast('請先選擇門市'); return; }
+  if (!orderData[id]) orderData[id] = { stock:'', order:0 };
+  const { min, step } = getProductRule(id);
+  const cur = orderData[id].order || 0;
+  let n;
+  if (delta > 0) {
+    n = cur === 0 ? min : cur + step;  // 從 0 直接跳到最低量
+  } else {
+    n = cur <= min ? 0 : cur - step;   // 到最低量再按一次歸零
+  }
+  n = Math.max(0, n);
+  orderData[id].order = n;
+  const input = document.getElementById(`order_${id}`); if(input) input.value = n;
+  const card = document.getElementById(`card_${id}`); if(card) card.classList.toggle('has-order', n>0);
+  updateSummary();
+}
+
+// ========================
+// 箱數估算
+// ========================
+function calcEstimatedBoxes() {
+  let regularBoxes = 0;
+  let looseFraction = 0;   // 散裝品項的總分數箱數（合併計算）
+  const regularBreakdown = [];
+  const looseItems = [];   // 散裝品項列表
+  const saltItems = [];    // 牛排鹽（完全不算箱）
+
+  PRODUCTS.forEach(p => {
+    if (p.special) return;  // 餐包為代訂（下週四出貨），不計入本週箱數
+    const qty = orderData[p.id]?.order || 0; if (!qty) return;
+    if (LOOSE_BOX.hasOwnProperty(p.id)) {
+      const perBox = LOOSE_BOX[p.id];
+      if (perBox === 0) {
+        // 牛排鹽：散裝塞別箱，不計算
+        saltItems.push(`${p.name.slice(0,4)} ×${qty}（散裝）`);
+      } else {
+        // 散裝品項：累計分數，最後合併進一批箱子
+        looseFraction += qty / perBox;
+        looseItems.push(`${p.name.slice(0,4)} ×${qty}`);
+      }
+    } else if (p.unit === '箱') {
+      regularBoxes += qty;
+      regularBreakdown.push(`${p.name.slice(0,4)} ×${qty}箱`);
+    } else {
+      regularBreakdown.push(`${p.name.slice(0,4)} ×${qty}${p.unit}`);
+    }
+  });
+
+  // 上週餐包（本週隨一般品項出貨）
+  if (lastWeekBreadQty > 0) {
+    const perBox = LOOSE_BOX[1367] || 6;
+    looseFraction += lastWeekBreadQty / perBox;
+    looseItems.push(`上週餐包 ×${lastWeekBreadQty}`);
+  }
+
+  // 散裝品項合併為整箱（無論幾分之幾都進位為整箱）
+  const looseBoxes = looseFraction > 0 ? Math.ceil(looseFraction) : 0;
+  const totalBoxes = regularBoxes + looseBoxes;
+
+  const breakdown = [...regularBreakdown];
+  if (looseBoxes > 0) {
+    breakdown.push(`散裝 ${looseBoxes}箱（${looseItems.join('、')}）`);
+  }
+  if (saltItems.length) {
+    breakdown.push(...saltItems);
+  }
+
+  return { boxes: totalBoxes, breakdown };
+}
+
+function toggleInventoryOnly() {
+  inventoryOnly = !inventoryOnly;
+  const toggle = document.getElementById('inventoryToggle');
+  const thumb  = document.getElementById('inventoryThumb');
+  const btn    = document.getElementById('submitBtn');
+  if (inventoryOnly) {
+    toggle.style.background = '#7c3aed';
+    thumb.style.left = '20px';
+    if (btn && !isSubmitted) { btn.textContent = '送出盤點'; btn.disabled = !currentStore || !document.getElementById('submitterName').value.trim(); }
+  } else {
+    toggle.style.background = '#d1d5db';
+    thumb.style.left = '2px';
+    if (btn && !isSubmitted) { btn.textContent = t('btnSubmit'); }
+  }
+  renderProducts();
+  updateSummary();
+}
+
+function renderLastWeekBread() {
+  const banner = document.getElementById('lastWeekBreadBanner');
+  if (!banner) return;
+  if (lastWeekBreadQty > 0) {
+    document.getElementById('lastWeekBreadBannerLabel').textContent = t('lastWeekBreadLabel');
+    document.getElementById('lastWeekBreadBannerQty').textContent = `${lastWeekBreadQty} 包`;
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function updateSummary() {
+  const ordered = PRODUCTS.filter(p => (orderData[p.id]?.order||0) > 0);
+  const { boxes, breakdown } = calcEstimatedBoxes();
+  const name = document.getElementById('submitterName').value.trim();
+  const breadThisWeek = orderData[1367]?.order || 0;
+  const breadNote = breadThisWeek > 0 ? t('breadNextWeek').replace('{qty}', breadThisWeek) : '';
+  document.getElementById('summaryText').textContent = currentStore
+    ? `${ordered.length} ${t('summaryItems')}　${t('summaryBoxes')} ${boxes} 箱${breadNote}`
+    : t('summaryDefault');
+  document.getElementById('summaryDetail').textContent = ordered.length ? breakdown.join('　') : '';
+
+  // 最低箱數警示
+  const warnBar = document.getElementById('minBoxWarnBar');
+  if (currentStore && boxes > 0) {
+    const minB = getStoreMinBoxes();
+    if (boxes < minB) {
+      warnBar.textContent = t('minBoxWarn').replace('{boxes}', boxes).replace(/\{min\}/g, minB);
+      warnBar.style.display = 'block';
+    } else {
+      warnBar.style.display = 'none';
+    }
+  } else {
+    warnBar.style.display = 'none';
+  }
+
+  const btn = document.getElementById('submitBtn');
+  if (!isSubmitted) btn.disabled = (!inventoryOnly && ordered.length===0) || !currentStore || !name;
+}
+
+
+// ========================
+// Submit
+// ========================
+function showMinBoxWarning(boxes, minB) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML =
+      '<div style="background:#fff;border-radius:14px;padding:24px 20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2);text-align:center">' +
+        '<div style="font-size:36px;margin-bottom:10px">📦</div>' +
+        '<div style="font-size:15px;font-weight:800;color:#d97706;line-height:1.6;margin-bottom:6px">' +
+          '預估 ' + boxes + ' 箱，未達最低出貨量 ' + minB + ' 箱' +
+        '</div>' +
+        '<div style="font-size:13px;color:#64748b;margin-bottom:20px">運費仍以 ' + minB + ' 箱計算<br>是否要返回補充訂貨？</div>' +
+        '<div style="display:flex;gap:10px">' +
+          '<button id="mbBack" style="flex:1;padding:11px;border:none;border-radius:9px;font-size:14px;font-weight:700;background:#d97706;color:#fff;cursor:pointer">← 返回修改</button>' +
+          '<button id="mbGo"   style="flex:1;padding:11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-weight:700;background:#f8fafc;color:#64748b;cursor:pointer">直接送出</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.querySelector('#mbBack').onclick = () => { modal.remove(); resolve(false); };
+    modal.querySelector('#mbGo').onclick   = () => { modal.remove(); resolve(true); };
+  });
+}
+
+function showDeadlineWarning() {
+  return new Promise(resolve => {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    modal.innerHTML =
+      '<div style="background:#fff;border-radius:14px;padding:24px 20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2);text-align:center">' +
+        '<div style="font-size:36px;margin-bottom:10px">⚠️</div>' +
+        '<div style="font-size:15px;font-weight:800;color:#dc2626;line-height:1.6;margin-bottom:20px">' +
+          '因已超過下單時間，<br>請 另外LINE 通知央廚' +
+        '</div>' +
+        '<div style="display:flex;gap:10px">' +
+          '<button id="dlgCancel" style="flex:1;padding:11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-weight:700;background:#f8fafc;color:#64748b;cursor:pointer">取消</button>' +
+          '<button id="dlgConfirm" style="flex:1;padding:11px;border:none;border-radius:9px;font-size:14px;font-weight:700;background:#dc2626;color:#fff;cursor:pointer">確定送出</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.querySelector('#dlgConfirm').onclick = () => { modal.remove(); resolve(true); };
+    modal.querySelector('#dlgCancel').onclick  = () => { modal.remove(); resolve(false); };
+  });
+}
+
+async function submitOrder() {
+  if (!currentStore) { showToast(t('toastStore')); return; }
+  const submitterName = document.getElementById('submitterName').value.trim();
+  if (!submitterName) { showToast(t('toastName')); document.getElementById('submitterName').focus(); return; }
+
+  // 截止時間警示（週一 10:00 後）
+  const _now = new Date();
+  if (_now.getDay() === 1 && _now.getHours() >= 10) {
+    const go = await showDeadlineWarning();
+    if (!go) return;
+  }
+
+  // 最低箱數警示
+  const { boxes: _submitBoxes } = calcEstimatedBoxes();
+  const _minB = getStoreMinBoxes();
+  if (_submitBoxes > 0 && _submitBoxes < _minB) {
+    const go = await showMinBoxWarning(_submitBoxes, _minB);
+    if (!go) return;
+  }
+
+
+  const ordered = PRODUCTS.filter(p => (orderData[p.id]?.order||0) > 0);
+  if (!inventoryOnly && !ordered.length) { showToast(t('toastItem')); return; }
+
+  const btn = document.getElementById('submitBtn');
+  btn.textContent = t('btnSubmitting'); btn.disabled = true;
+
+  const payload = {
+    store_key: currentStore,
+    store_code: STORE_CODES_MAP[currentStore] || '',
+    week_date: currentWeek,
+    submitter_name: submitterName,
+    data: { ...orderData },
+    items: ordered.map(p => ({
+      id: p.id, name: p.name, unit: p.unit,
+      stock: orderData[p.id]?.stock || 0,
+      order: orderData[p.id]?.order || 0,
+      special: p.special || false,
+    })),
+    submitted_at: new Date().toISOString()
+  };
+
+  const { error } = await sb.from('orders').upsert(payload, { onConflict: 'store_key,week_date' });
+  if (error) {
+    console.error(error);
+    showToast(t('toastFail'));
+    btn.textContent = t('btnSubmit'); btn.disabled = false;
+    return;
+  }
+
+  const thisMonday = getOrderWeekMonday();
+  const del = getThursday(thisMonday, 0);
+  const { boxes } = calcEstimatedBoxes();
+  document.getElementById('pageOrder').style.display = 'none';
+  document.getElementById('summaryBar').style.display = 'none';
+  document.getElementById('hSuccess').textContent = t('successTitle');
+  document.getElementById('successDetail').innerHTML =
+    `<strong>${currentStore}</strong>　${submitterName}<br>${fmtDate(del)}　<strong>${boxes} 箱</strong><br><br>` +
+    ordered.map(p=>{
+      const dn = currentLang==='ja'&&PRODUCT_NAMES_JA[p.id]?PRODUCT_NAMES_JA[p.id]:p.name;
+      return `${dn} × ${orderData[p.id].order} ${p.unit}${p.special?' 🍞':''}`;
+    }).join('<br>');
+  document.getElementById('btnBack').textContent = t('btnBack');
+  document.getElementById('successScreen').classList.add('show');
+}
+
+function resetAndBack() {
+  orderData = {}; isSubmitted = false; lastWeekBreadQty = 0; inventoryOnly = false;
+  const toggle = document.getElementById('inventoryToggle');
+  const thumb  = document.getElementById('inventoryThumb');
+  if (toggle) toggle.style.background = '#d1d5db';
+  if (thumb)  thumb.style.left = '2px';
+  document.getElementById('pageOrder').style.display = 'block';
+  document.getElementById('summaryBar').style.display = 'flex';
+  document.getElementById('successScreen').classList.remove('show');
+  document.getElementById('storeSelect').value = '';
+  currentStore = '';
+  document.getElementById('headerSub').textContent = '請選擇門市';
+  document.getElementById('submittedBanner').style.display = 'none';
+  const btn = document.getElementById('submitBtn');
+  btn.textContent = '送出訂單'; btn.className = 'submit-btn'; btn.disabled = true;
+  renderProducts(); renderLastWeekBread(); updateSummary();
+  switchNav('order');
+}
+
+// ========================
+// History
+// ========================
+async function renderHistory() {
+  const content = document.getElementById('historyContent');
+  if (!currentStore) { content.innerHTML = `<div class="history-empty">${t('historyEmpty')}</div>`; return; }
+  content.innerHTML = `<div class="history-empty">${t('historyLoading')}</div>`;
+
+  const { data } = await sb.from('orders').select('*')
+    .eq('store_key', currentStore).order('week_date', { ascending:false }).limit(12);
+
+  if (!data || !data.length) { content.innerHTML = `<div class="history-empty">📭 ${currentStore}<br>${t('historyNone')}</div>`; return; }
+
+  content.innerHTML = data.map((order, idx) => {
+    const rawData = order.data || {};
+    const time = order.submitted_at ? new Date(order.submitted_at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    const byName = order.submitter_name ? `　${t('historyBy')}${order.submitter_name}` : '';
+    const visibleProds = PRODUCTS.filter(p => {
+      const d = rawData[p.id];
+      return (d?.order||0) > 0 || (d?.stock !== '' && d?.stock !== undefined && d?.stock !== null);
+    });
+    return `
+    <div class="history-card">
+      <div class="history-header" onclick="toggleHistory(${idx})">
+        <div class="week-label">📅 ${order.week_date}${byName}</div>
+        <div class="submitted-time">${time}</div>
+      </div>
+      <div class="history-body" id="hbody_${idx}">
+        ${visibleProds.length === 0 ? '<div style="padding:8px;color:var(--muted);font-size:13px">無資料</div>' :
+          visibleProds.map(p => {
+            const d = rawData[p.id] || {};
+            const dn = currentLang==='ja' && PRODUCT_NAMES_JA[p.id] ? PRODUCT_NAMES_JA[p.id] : p.name;
+            const stockVal = (d.stock !== '' && d.stock !== undefined && d.stock !== null) ? d.stock : null;
+            const orderVal = d.order || 0;
+            return `<div class="history-item">
+              <span>${dn}${p.special?`<span class="special-tag">${t('tagSpecial')}</span>`:''}</span>
+              <span>
+                <span class="hstock">${t('historyStock')} ${stockVal !== null ? stockVal + ' ' + p.stockUnit : '—'}</span>
+                ${orderVal > 0 ? `　<span class="hqty">${t('historyOrder')} ${orderVal} ${p.unit}</span>` : '<span style="color:#cbd5e0;font-size:11px">　未訂</span>'}
+              </span>
+            </div>`;
+          }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleHistory(idx) {
+  const body = document.getElementById(`hbody_${idx}`); body.classList.toggle('open');
+}
+
+function switchNav(tab) {
+  document.getElementById('navOrder').classList.toggle('active', tab==='order');
+  document.getElementById('navHistory').classList.toggle('active', tab==='history');
+  document.getElementById('pageOrder').style.display = tab==='order' ? 'block' : 'none';
+  document.getElementById('pageHistory').style.display = tab==='history' ? 'block' : 'none';
+  document.getElementById('summaryBar').style.display = tab==='order' ? 'flex' : 'none';
+  if (tab==='history') renderHistory();
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+init();
+</script>
+</body>
+</html>
