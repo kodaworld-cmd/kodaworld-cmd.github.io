@@ -566,10 +566,12 @@ async function doRegister() {
   });
   if (error) { msg.style.color='#dc2626'; msg.textContent='申請失敗：' + error.message; return; }
   if (signUpData?.user) {
-    await sb.from('user_profiles').upsert({
+    const { error: profileError } = await sb.from('user_profiles').upsert({
       id: signUpData.user.id, email, display_name: name,
       requested_store: requestedStore, is_admin: false,
     }, { onConflict: 'id' });
+    // 若 RLS 導致 upsert 失敗，metadata 仍保留 requested_store，登入時會自動補寫
+    if (profileError) console.warn('profile upsert failed at signup:', profileError.message);
   }
   msg.style.color='#16a34a';
   msg.textContent=`✅ 驗證信已寄出！申請門市：${requestedStore}。請點擊信件中的連結完成驗證後即可登入。`;
@@ -585,12 +587,18 @@ async function doLogout() {
 }
 
 async function loadUserAndStart(user) {
-  // 載入角色
+  // 載入角色與申請門市
   const { data: profileData } = await sb.from('user_profiles')
-    .select('role, is_admin, display_name').eq('id', user.id).maybeSingle();
+    .select('role, is_admin, display_name, requested_store').eq('id', user.id).maybeSingle();
   currentUserRole = profileData?.role || (profileData?.is_admin ? 'admin' : 'store');
   const nameInput = document.getElementById('submitterName');
   if (nameInput && profileData?.display_name) { nameInput.value = profileData.display_name; }
+
+  // 若 profile 裡缺少 requested_store，從 auth metadata 補寫（signup 時已存在 user_metadata）
+  const metaStore = user.user_metadata?.requested_store;
+  if (profileData && !profileData.requested_store && metaStore) {
+    await sb.from('user_profiles').update({ requested_store: metaStore }).eq('id', user.id);
+  }
 
   // 載入被指派的門市
   const { data: accessData } = await sb.from('user_store_access')

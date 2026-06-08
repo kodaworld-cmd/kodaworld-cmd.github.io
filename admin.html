@@ -2122,9 +2122,11 @@ init();
 
   // ── editDefaultProduct override ───────────────────────
   window.editDefaultProduct = function(id) {
-    var p = (window.PRODUCTS_DEFAULT||[]).find(function(x){ return x.id===id; });
+    var _pd = (typeof PRODUCTS_DEFAULT !== 'undefined') ? PRODUCTS_DEFAULT : [];
+    var _cp = (typeof cachedCustomProducts !== 'undefined') ? cachedCustomProducts : [];
+    var p = _pd.find(function(x){ return x.id===id; });
     if (!p) return;
-    var cur = (window.cachedCustomProducts||[]).find(function(x){ return x.id===id; }) || {};
+    var cur = _cp.find(function(x){ return x.id===id; }) || {};
     var bt=cur.box_type||'box', cat=cur.cat||p.cat||'冷凍', unit=cur.unit||p.unit||'箱';
     var old=document.getElementById('edModal'); if(old) old.remove();
     var m=document.createElement('div'); m.id='edModal';
@@ -2153,7 +2155,7 @@ init();
       +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">訂購倍數（每次+/-幾個）</label><input id="ed_sp" type="number" min="1" value="'+(cur.step||p.step||1)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px;text-align:center"></div></div>'
       +'<div style="display:flex;gap:8px"><button id="ed_sv" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存</button><button id="ed_cl" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button></div></div>';
     document.body.appendChild(m);
-    var existing=(window.cachedCustomProducts||[]).find(function(x){ return x.id===id; });
+    var existing=_cp.find(function(x){ return x.id===id; });
     document.getElementById('ed_x').onclick=function(){ m.remove(); };
     document.getElementById('ed_cl').onclick=function(){ m.remove(); };
     document.getElementById('ed_bt').onchange=function(){
@@ -2178,8 +2180,8 @@ init();
       if(existing){var r=await sb.from('custom_products').update(payload).eq('id',id);err=r.error;}
       else{var r2=await sb.from('custom_products').insert(payload);err=r2.error;}
       if(err){showToast('儲存失敗：'+err.message);return;}
-      if(existing){var idx=(window.cachedCustomProducts||[]).findIndex(function(x){return x.id===id;});if(idx>=0)window.cachedCustomProducts[idx]=Object.assign({},window.cachedCustomProducts[idx],payload);}
-      else{if(window.cachedCustomProducts)window.cachedCustomProducts.push(payload);}
+      if(existing){var idx=_cp.findIndex(function(x){return x.id===id;});if(idx>=0)_cp[idx]=Object.assign({},_cp[idx],payload);}
+      else{_cp.push(payload);}
       m.remove(); showToast('已儲存「'+name+'」');
       if(typeof rebuildProducts==='function')rebuildProducts();
       if(typeof renderProductList==='function')renderProductList();
