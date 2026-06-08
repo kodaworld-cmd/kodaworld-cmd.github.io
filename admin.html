@@ -1427,26 +1427,43 @@ function renderProductList() {
   // 預設品項
   rows.push(`<tr><td colspan="12" style="background:#f0fdf4;font-size:11px;font-weight:800;color:#15803d;padding:6px 10px;border-bottom:2px solid #86efac">${ta('p8DefaultGroup')}（${PRODUCTS_DEF.length} 項）</td></tr>`);
   PRODUCTS_DEF.forEach(p => {
-    const isDisabled = cachedDisabledDefaults.includes(p.id);
-    const isDeleted  = cachedDeletedDefaults.includes(p.id);
+    const isDisabled   = cachedDisabledDefaults.includes(p.id);
+    const isDeleted    = cachedDeletedDefaults.includes(p.id);
+    const overrideCp   = cachedCustomProducts.find(x => x.id === p.id);
+    const isOverridden = !!overrideCp;
     const state = isDeleted ? 'deleted' : isDisabled ? 'disabled' : 'active';
-    const lbConst = (typeof LOOSE_BOX_DEFAULT !== 'undefined' ? LOOSE_BOX_DEFAULT : {})[p.id];
-    const btLabel = lbConst===0?'不計箱':lbConst>0?'散貨拼箱':'整箱';
-    const btColor = btLabel==='散貨拼箱'?'#fef3c7':btLabel==='不計箱'?'#fee2e2':'#eff6ff';
-    const btTxt   = btLabel==='散貨拼箱'?'#92400e':btLabel==='不計箱'?'var(--red)':'var(--primary)';
-    rows.push(`<tr style="${state!=='active'?'opacity:0.45':''}">
+
+    // 若有自訂覆寫，顯示覆寫後的值；否則顯示預設值
+    const dispCat  = isOverridden ? (overrideCp.cat  || p.cat)          : p.cat;
+    const dispUnit = isOverridden ? (overrideCp.unit || p.unit)         : p.unit;
+    const dispStock= isOverridden ? (overrideCp.stock_unit || p.stockUnit || p.unit) : (p.stockUnit || p.unit);
+    const dispPerBox = isOverridden ? (overrideCp.per_box_default || p.perBoxDefault || 1) : (p.perBoxDefault || 1);
+    const dispMinQty = isOverridden ? (overrideCp.min_qty || p.minQty || 1) : (p.minQty || 1);
+    const dispBt   = isOverridden ? (overrideCp.box_type || 'box') : null;
+    const lbConst  = isOverridden
+      ? (dispBt === 'none' ? 0 : dispBt === 'loose' ? (overrideCp.loose_box_qty || 0) : null)
+      : (typeof LOOSE_BOX_DEFAULT !== 'undefined' ? LOOSE_BOX_DEFAULT : {})[p.id];
+    const btLabel  = lbConst===0?'不計箱':lbConst>0?'散貨拼箱':'整箱';
+    const btColor  = btLabel==='散貨拼箱'?'#fef3c7':btLabel==='不計箱'?'#fee2e2':'#eff6ff';
+    const btTxt    = btLabel==='散貨拼箱'?'#92400e':btLabel==='不計箱'?'var(--red)':'var(--primary)';
+
+    const catBg  = dispCat==='冷凍'?'#e0f2fe':dispCat==='常温'?'#fef3c7':'#f5f3ff';
+    const catClr = dispCat==='冷凍'?'#0369a1':dispCat==='常温'?'#92400e':'var(--special)';
+
+    rows.push(`<tr style="opacity:${state!=='active'?'0.45':'1'}${isOverridden?';background:#fffbeb':''}">
       <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.id}</td>
-      <td><strong>${p.name}</strong></td>
+      <td><strong>${p.name}</strong>${isOverridden?'<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;margin-left:4px">已覆寫</span>':''}</td>
       <td style="color:var(--muted)">${p.short||'—'}</td>
-      <td><span style="background:${p.cat==='冷凍'?'#e0f2fe':p.cat==='常温'?'#fef3c7':'#f5f3ff'};color:${p.cat==='冷凍'?'#0369a1':p.cat==='常温'?'#92400e':'var(--special)'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${p.cat}</span></td>
-      <td>${p.unit}</td><td>${p.stockUnit||p.unit}</td>
+      <td><span style="background:${catBg};color:${catClr};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${dispCat}</span></td>
+      <td>${dispUnit}</td><td>${dispStock}</td>
       <td style="text-align:center"><span style="background:${btColor};color:${btTxt};padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700">${btLabel}</span></td>
       <td style="text-align:center">${lbConst>0?lbConst:lbConst===0?'—':'—'}</td>
-      <td style="text-align:center">${p.perBoxDefault||1}</td>
-      <td style="text-align:center">${p.minQty||1}</td>
+      <td style="text-align:center">${dispPerBox}</td>
+      <td style="text-align:center">${dispMinQty}</td>
       <td style="text-align:center">
         ${isDeleted?'<span style="color:var(--red);font-weight:700;font-size:11px">已刪除</span>':
           isDisabled?'<span style="background:#fee2e2;color:var(--red);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">停用</span>':
+          isOverridden?'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">已覆寫</span>':
           '<span style="background:#f0fdf4;color:var(--green);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">啟用</span>'}
       </td>
       <td style="text-align:center;white-space:nowrap">
