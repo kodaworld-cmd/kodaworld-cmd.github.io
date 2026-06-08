@@ -1455,11 +1455,11 @@ function renderProductList() {
             style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">
             ✏️ 編輯
           </button>
-          <button onclick="toggleDefaultProduct(${p.id},${isDisabled})"
+          <button onclick="showToggleProductSQL(${p.id},'${p.name}',${isDisabled})"
             style="background:${isDisabled?'#f0fdf4':'#fff7ed'};color:${isDisabled?'var(--green)':'var(--orange)'};border:1px solid ${isDisabled?'#86efac':'#fdba74'};border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">
             ${isDisabled?ta('p8BtnEnable'):ta('p8BtnDisable')}
           </button>
-          <button onclick="deleteDefaultProduct(${p.id},'${p.name}')"
+          <button onclick="showDeleteProductSQL(${p.id},'${p.name}')"
             style="background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer">
             ${ta('p8BtnDelete')}
           </button>` : `<span style="font-size:11px;color:#cbd5e0">${ta('p8Deleted')}</span>`}
@@ -1673,52 +1673,92 @@ async function deleteUser(userId, email) {
   loadUserList();
 }
 
+// ========================
+// SQL Helper Modals
+// ========================
+function _showSQLModal(title, titleColor, sql) {
+  const existing = document.getElementById('sqlHelperModal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'sqlHelperModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:12px;padding:22px;max-width:620px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.22)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
+        '<h3 style="font-size:15px;font-weight:800;color:' + titleColor + '">' + esc(title) + '</h3>' +
+        '<button id="_sqlClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b">✕</button>' +
+      '</div>' +
+      '<div style="font-size:12px;color:#64748b;margin-bottom:10px">複製以下代碼，貼入 <strong>Supabase → SQL Editor</strong>（postgres 角色）執行。</div>' +
+      '<pre id="_sqlCode" style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:16px;font-size:12px;font-family:monospace;line-height:1.8;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0 0 14px">' + esc(sql) + '</pre>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button id="_sqlCopy" style="flex:1;background:#1e293b;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">📋 複製代碼</button>' +
+        '<button id="_sqlClose2" style="background:#f1f5f9;color:#1e293b;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer">關閉</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+  const close = () => modal.remove();
+  document.getElementById('_sqlClose').onclick  = close;
+  document.getElementById('_sqlClose2').onclick = close;
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+  document.getElementById('_sqlCopy').onclick = () => {
+    navigator.clipboard.writeText(sql).then(() => {
+      const btn = document.getElementById('_sqlCopy');
+      if (btn) { btn.textContent = '✅ 已複製！'; setTimeout(() => { if (btn) btn.textContent = '📋 複製代碼'; }, 2000); }
+    }).catch(() => {
+      const pre = document.getElementById('_sqlCode');
+      if (pre) { const r = document.createRange(); r.selectNode(pre); window.getSelection().removeAllRanges(); window.getSelection().addRange(r); }
+    });
+  };
+}
+
 function showDeleteSQL(userId, email) {
-  const sql =
+  _showSQLModal('🗑 刪除帳號 SQL — ' + email, '#dc2626',
 `-- 刪除帳號：${email}
 -- 請在 Supabase SQL Editor（postgres 角色）執行
 
 DELETE FROM user_store_access WHERE user_id = '${userId}';
 DELETE FROM user_profiles      WHERE id = '${userId}';
-DELETE FROM auth.users         WHERE id = '${userId}';`;
+DELETE FROM auth.users         WHERE id = '${userId}';`);
+}
 
-  const existing = document.getElementById('deleteSQLModal');
-  if (existing) existing.remove();
+function showDeleteProductSQL(id, name) {
+  _showSQLModal('🗑 永久刪除品項 SQL — ' + name, '#dc2626',
+`-- 永久隱藏預設品項：${name}（ID: ${id}）
+-- 將此 ID 加入 deleted_default_products 清單
 
-  const modal = document.createElement('div');
-  modal.id = 'deleteSQLModal';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
-  modal.innerHTML =
-    '<div style="background:#fff;border-radius:12px;padding:22px;max-width:560px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.22)">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">' +
-        '<h3 style="font-size:15px;font-weight:800;color:#dc2626">🗑 刪除帳號 SQL</h3>' +
-        '<button id="delSQLClose" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b">✕</button>' +
-      '</div>' +
-      '<div style="font-size:12px;color:#64748b;margin-bottom:10px">請複製以下代碼，貼入 <strong>Supabase → SQL Editor</strong> 執行。</div>' +
-      '<pre id="deleteSQLCode" style="background:#1e293b;color:#e2e8f0;border-radius:8px;padding:16px;font-size:12px;font-family:monospace;line-height:1.8;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0 0 14px">' + sql.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre>' +
-      '<div style="display:flex;gap:8px">' +
-        '<button id="delSQLCopy" style="flex:1;background:#1e293b;color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">📋 複製代碼</button>' +
-        '<button id="delSQLCancel" style="background:#f1f5f9;color:#1e293b;border:none;border-radius:8px;padding:10px 18px;font-size:14px;font-weight:700;cursor:pointer">關閉</button>' +
-      '</div>' +
-    '</div>';
+INSERT INTO settings (key, value, updated_at)
+VALUES ('deleted_default_products', '[${id}]'::jsonb, NOW())
+ON CONFLICT (key) DO UPDATE
+SET value      = settings.value || '[${id}]'::jsonb,
+    updated_at = NOW();`);
+}
 
-  document.body.appendChild(modal);
-  document.getElementById('delSQLClose').onclick  = () => modal.remove();
-  document.getElementById('delSQLCancel').onclick = () => modal.remove();
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  document.getElementById('delSQLCopy').onclick = () => {
-    navigator.clipboard.writeText(sql).then(() => {
-      const btn = document.getElementById('delSQLCopy');
-      btn.textContent = '✅ 已複製！';
-      setTimeout(() => { if (btn) btn.textContent = '📋 複製代碼'; }, 2000);
-    }).catch(() => {
-      const pre = document.getElementById('deleteSQLCode');
-      const range = document.createRange();
-      range.selectNode(pre);
-      window.getSelection().removeAllRanges();
-      window.getSelection().addRange(range);
-    });
-  };
+function showToggleProductSQL(id, name, isCurrentlyDisabled) {
+  if (isCurrentlyDisabled) {
+    _showSQLModal('✅ 啟用品項 SQL — ' + name, '#16a34a',
+`-- 啟用預設品項：${name}（ID: ${id}）
+-- 從 disabled_default_products 清單移除此 ID
+
+UPDATE settings
+SET value = (
+  SELECT COALESCE(jsonb_agg(elem), '[]'::jsonb)
+  FROM jsonb_array_elements(value) elem
+  WHERE elem::text != '${id}'
+),
+updated_at = NOW()
+WHERE key = 'disabled_default_products';`);
+  } else {
+    _showSQLModal('⏸ 停用品項 SQL — ' + name, '#d97706',
+`-- 停用預設品項：${name}（ID: ${id}）
+-- 將此 ID 加入 disabled_default_products 清單
+
+INSERT INTO settings (key, value, updated_at)
+VALUES ('disabled_default_products', '[${id}]'::jsonb, NOW())
+ON CONFLICT (key) DO UPDATE
+SET value      = settings.value || '[${id}]'::jsonb,
+    updated_at = NOW();`);
+  }
 }
 
 // 保留相容舊版呼叫
