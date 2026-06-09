@@ -419,12 +419,15 @@ tr:hover td { background: #f8fafc; }
     <!-- 品項列表 -->
     <div class="section-card">
       <div class="section-header">
-        <h3>📋 品項列表（預設 + 自訂）</h3>
-        <span style="font-size:12px;color:var(--muted)">停用＝隱藏不訂貨　刪除＝永久移除</span>
+        <h3>📋 品項列表</h3>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:12px;color:var(--muted)">每箱數可直接編輯後儲存</span>
+          <button onclick="saveAllPerBox()" style="background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">💾 儲存每箱數</button>
+        </div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>ID</th><th>品項名稱</th><th>縮寫</th><th>分類</th><th>訂貨單位</th><th>盤點單位</th><th class="c">箱裝方式</th><th class="c">拼裝數</th><th class="c">每箱數</th><th class="c">最低訂量</th><th class="c">狀態</th><th class="c">操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>品項名稱</th><th>縮寫</th><th>分類</th><th>訂貨單位</th><th>盤點單位</th><th class="c">箱裝方式</th><th class="c">拼裝數</th><th class="c">每箱數 ✎</th><th class="c">最低訂量</th><th class="c">狀態</th><th class="c">操作</th></tr></thead>
           <tbody id="productListBody"></tbody>
           <tfoot><tr><td colspan="12" style="padding:6px 10px;font-size:11px;color:var(--muted);background:#f8fafc">* 預設品項停用後門市不顯示；刪除後永久移除（自訂）或標記隱藏（預設）。</td></tr></tfoot>
         </table>
@@ -1441,110 +1444,106 @@ async function deleteCustomProduct(id) {
 
 function renderProductList() {
   const body = document.getElementById('productListBody'); if(!body) return;
-  const PRODUCTS_DEF = (typeof PRODUCTS_DEFAULT !== 'undefined') ? PRODUCTS_DEFAULT : PRODUCTS;
+  const PRODUCTS_DEF = (typeof PRODUCTS_DEFAULT !== 'undefined') ? PRODUCTS_DEFAULT : [];
+  const cpIds = new Set(cachedCustomProducts.map(x => x.id));
   const rows = [];
 
-  // 預設品項（已被自訂覆寫的不顯示，只在自訂品項區顯示）
-  const overriddenIds = new Set(cachedCustomProducts.map(x => x.id));
-  const visibleDefaults = PRODUCTS_DEF.filter(p => !overriddenIds.has(p.id));
-  const overriddenCount = PRODUCTS_DEF.length - visibleDefaults.length;
-  const overriddenNote = overriddenCount > 0 ? `　<span style="font-weight:400;color:#92400e">（${overriddenCount} 項已覆寫，見下方自訂品項）</span>` : '';
-  rows.push(`<tr><td colspan="12" style="background:#f0fdf4;font-size:11px;font-weight:800;color:#15803d;padding:6px 10px;border-bottom:2px solid #86efac">${ta('p8DefaultGroup')}（${visibleDefaults.length} 項）${overriddenNote}</td></tr>`);
-  visibleDefaults.forEach(p => {
-    const isDisabled   = cachedDisabledDefaults.includes(p.id);
-    const isDeleted    = cachedDeletedDefaults.includes(p.id);
-    const overrideCp   = null;
-    const isOverridden = false;
-    const state = isDeleted ? 'deleted' : isDisabled ? 'disabled' : 'active';
+  // 合併所有品項：自訂覆寫優先，其餘保留預設
+  const allItems = [
+    ...PRODUCTS_DEF.filter(p => !cpIds.has(p.id) && !cachedDeletedDefaults.includes(p.id)),
+    ...cachedCustomProducts,
+  ].sort((a, b) => a.id - b.id);
 
-    // 若有自訂覆寫，顯示覆寫後的值；否則顯示預設值
-    const dispCat  = isOverridden ? (overrideCp.cat  || p.cat)          : p.cat;
-    const dispUnit = isOverridden ? (overrideCp.unit || p.unit)         : p.unit;
-    const dispStock= isOverridden ? (overrideCp.stock_unit || p.stockUnit || p.unit) : (p.stockUnit || p.unit);
-    const dispPerBox = isOverridden ? (overrideCp.per_box_default || p.perBoxDefault || 1) : (p.perBoxDefault || 1);
-    const dispMinQty = isOverridden ? (overrideCp.min_qty || p.minQty || 1) : (p.minQty || 1);
-    const dispBt   = isOverridden ? (overrideCp.box_type || 'box') : null;
-    const lbConst  = isOverridden
-      ? (dispBt === 'none' ? 0 : dispBt === 'loose' ? (overrideCp.loose_box_qty || 0) : null)
-      : (typeof LOOSE_BOX_DEFAULT !== 'undefined' ? LOOSE_BOX_DEFAULT : {})[p.id];
-    const btLabel  = lbConst===0?'不計箱':lbConst>0?'散貨拼箱':'整箱';
-    const btColor  = btLabel==='散貨拼箱'?'#fef3c7':btLabel==='不計箱'?'#fee2e2':'#eff6ff';
-    const btTxt    = btLabel==='散貨拼箱'?'#92400e':btLabel==='不計箱'?'var(--red)':'var(--primary)';
+  allItems.forEach(item => {
+    const isCustom  = cpIds.has(item.id);
+    const defP      = PRODUCTS_DEF.find(x => x.id === item.id);
+    const isNewItem = isCustom && !defP;           // 全新自訂品項
+    const isDisabled = isCustom
+      ? item.is_active === false
+      : cachedDisabledDefaults.includes(item.id);
+    const isActive  = !isDisabled;
 
-    const catBg  = dispCat==='冷凍'?'#e0f2fe':dispCat==='常温'?'#fef3c7':'#f5f3ff';
-    const catClr = dispCat==='冷凍'?'#0369a1':dispCat==='常温'?'#92400e':'var(--special)';
+    const cat  = item.cat  || defP?.cat  || '冷凍';
+    const unit = item.unit || defP?.unit || '箱';
+    const stockUnit = item.stock_unit || item.stockUnit || defP?.stockUnit || unit;
+    const perBox    = item.per_box_default || item.perBoxDefault || 1;
+    const minQty    = item.min_qty || item.minQty || 1;
 
-    rows.push(`<tr style="opacity:${state!=='active'?'0.45':'1'}${isOverridden?';background:#fffbeb':''}">
-      <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.id}</td>
-      <td><strong>${p.name}</strong>${isOverridden?'<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;margin-left:4px">已覆寫</span>':''}</td>
-      <td style="color:var(--muted)">${p.short||'—'}</td>
-      <td><span style="background:${catBg};color:${catClr};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${dispCat}</span></td>
-      <td>${dispUnit}</td><td>${dispStock}</td>
+    const lbConst = isCustom
+      ? (item.box_type==='none'?0 : item.box_type==='loose'?(item.loose_box_qty||0) : null)
+      : (typeof LOOSE_BOX_DEFAULT!=='undefined' ? LOOSE_BOX_DEFAULT : {})[item.id];
+    const btLabel = lbConst===0?'不計箱':lbConst>0?'散貨拼箱':'整箱';
+    const btColor = btLabel==='散貨拼箱'?'#fef3c7':btLabel==='不計箱'?'#fee2e2':'#eff6ff';
+    const btTxt   = btLabel==='散貨拼箱'?'#92400e':btLabel==='不計箱'?'var(--red)':'var(--primary)';
+    const catBg   = cat==='冷凍'?'#e0f2fe':cat==='常温'?'#fef3c7':'#f5f3ff';
+    const catClr  = cat==='冷凍'?'#0369a1':cat==='常温'?'#92400e':'var(--special)';
+
+    const nameBadge = isNewItem
+      ? '<span style="background:#f0fdf4;color:#16a34a;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700;margin-left:4px">新增</span>'
+      : '';
+
+    const statusCell = isActive
+      ? '<span style="background:#f0fdf4;color:var(--green);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">啟用</span>'
+      : '<span style="background:#fee2e2;color:var(--red);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">停用</span>';
+
+    const opsCell = isCustom
+      ? `<button onclick="editDefaultProduct(${item.id})" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">✏️</button>
+         <button onclick="toggleCustomProduct(${item.id})" style="background:${isActive?'#fff7ed':'#f0fdf4'};color:${isActive?'var(--orange)':'var(--green)'};border:1px solid ${isActive?'#fdba74':'#86efac'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${isActive?'停用':'啟用'}</button>
+         <button onclick="deleteCustomProduct(${item.id})" style="background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:700;cursor:pointer">刪除</button>`
+      : `<button onclick="editDefaultProduct(${item.id})" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">✏️</button>
+         <button onclick="showToggleProductSQL(${item.id},'${item.name}',${isDisabled})" style="background:${isDisabled?'#f0fdf4':'#fff7ed'};color:${isDisabled?'var(--green)':'var(--orange)'};border:1px solid ${isDisabled?'#86efac':'#fdba74'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${isDisabled?'啟用':'停用'}</button>
+         <button onclick="showDeleteProductSQL(${item.id},'${item.name}')" style="background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:700;cursor:pointer">刪除</button>`;
+
+    rows.push(`<tr style="opacity:${isActive?'1':'0.5'}">
+      <td style="font-family:monospace;font-weight:700;color:var(--primary)">${item.id}</td>
+      <td><strong>${item.name}</strong>${nameBadge}</td>
+      <td style="color:var(--muted)">${item.short_name||item.short||'—'}</td>
+      <td><span style="background:${catBg};color:${catClr};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${cat}</span></td>
+      <td>${unit}</td><td>${stockUnit}</td>
       <td style="text-align:center"><span style="background:${btColor};color:${btTxt};padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700">${btLabel}</span></td>
       <td style="text-align:center">${lbConst>0?lbConst:lbConst===0?'—':'—'}</td>
-      <td style="text-align:center">${dispPerBox}</td>
-      <td style="text-align:center">${dispMinQty}</td>
       <td style="text-align:center">
-        ${isDeleted?'<span style="color:var(--red);font-weight:700;font-size:11px">已刪除</span>':
-          isDisabled?'<span style="background:#fee2e2;color:var(--red);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">停用</span>':
-          isOverridden?'<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">已覆寫</span>':
-          '<span style="background:#f0fdf4;color:var(--green);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">啟用</span>'}
+        <input type="number" min="1" value="${perBox}" data-id="${item.id}" data-orig="${perBox}" class="pb-input"
+          style="width:58px;text-align:center;padding:3px 5px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;background:#fff"
+          oninput="this.style.borderColor=parseInt(this.value)!==parseInt(this.dataset.orig)?'#2563eb':'var(--border)'">
       </td>
-      <td style="text-align:center;white-space:nowrap">
-        ${!isDeleted ? `
-          <button onclick="editDefaultProduct(${p.id})"
-            style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">
-            ✏️ 編輯
-          </button>
-          <button onclick="showToggleProductSQL(${p.id},'${p.name}',${isDisabled})"
-            style="background:${isDisabled?'#f0fdf4':'#fff7ed'};color:${isDisabled?'var(--green)':'var(--orange)'};border:1px solid ${isDisabled?'#86efac':'#fdba74'};border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">
-            ${isDisabled?ta('p8BtnEnable'):ta('p8BtnDisable')}
-          </button>
-          <button onclick="showDeleteProductSQL(${p.id},'${p.name}')"
-            style="background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer">
-            ${ta('p8BtnDelete')}
-          </button>` : `<span style="font-size:11px;color:#cbd5e0">${ta('p8Deleted')}</span>`}
-      </td>
+      <td style="text-align:center">${minQty}</td>
+      <td style="text-align:center">${statusCell}</td>
+      <td style="text-align:center;white-space:nowrap">${opsCell}</td>
     </tr>`);
   });
 
-  // 自訂品項
-  rows.push(`<tr><td colspan="12" style="background:#eff6ff;font-size:11px;font-weight:800;color:#1d4ed8;padding:6px 10px;border-bottom:2px solid #bfdbfe">${ta('p8CustomGroup')}（${cachedCustomProducts.length} 項）</td></tr>`);
-  if (!cachedCustomProducts.length) {
-    rows.push(`<tr><td colspan="12" style="text-align:center;padding:14px;color:var(--muted);font-size:12px">${ta('p8NoCustom')}</td></tr>`);
-  } else {
-    cachedCustomProducts.forEach(p => {
-      const isActive = p.is_active !== false;
-      const btLabel = p.box_type==='loose'?'散貨拼箱':p.box_type==='none'?'不計箱':'整箱';
-      const btColor = btLabel==='散貨拼箱'?'#fef3c7':btLabel==='不計箱'?'#fee2e2':'#eff6ff';
-      const btTxt   = btLabel==='散貨拼箱'?'#92400e':btLabel==='不計箱'?'var(--red)':'var(--primary)';
-      rows.push(`<tr style="${isActive?'':'opacity:0.45'}">
-        <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.id}</td>
-        <td><strong>${p.name}</strong> ${overriddenIds.has(p.id)?'<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">覆寫預設</span>':'<span style="background:#f0fdf4;color:#16a34a;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">新增</span>'}</td>
-        <td style="color:var(--muted)">${p.short_name||'—'}</td>
-        <td><span style="background:${p.cat==='冷凍'?'#e0f2fe':p.cat==='常温'?'#fef3c7':'#f5f3ff'};color:${p.cat==='冷凍'?'#0369a1':p.cat==='常温'?'#92400e':'var(--special)'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${p.cat}</span></td>
-        <td>${p.unit}</td><td>${p.stock_unit||p.unit}</td>
-        <td style="text-align:center"><span style="background:${btColor};color:${btTxt};padding:2px 7px;border-radius:8px;font-size:11px;font-weight:700">${btLabel}</span></td>
-        <td style="text-align:center">${p.box_type==='loose'?(p.loose_box_qty||'—'):'—'}</td>
-        <td style="text-align:center">${p.per_box_default||1}</td>
-        <td style="text-align:center">${p.min_qty||1}</td>
-        <td style="text-align:center">
-          <span style="background:${isActive?'#f0fdf4':'#fee2e2'};color:${isActive?'var(--green)':'var(--red)'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${isActive?'啟用':'停用'}</span>
-        </td>
-        <td style="text-align:center;white-space:nowrap">
-          <button onclick="toggleCustomProduct(${p.id})"
-            style="background:${isActive?'#fff7ed':'#f0fdf4'};color:${isActive?'var(--orange)':'var(--green)'};border:1px solid ${isActive?'#fdba74':'#86efac'};border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">
-            ${isActive?ta('p8BtnDisable'):ta('p8BtnEnable')}
-          </button>
-          <button onclick="deleteCustomProduct(${p.id})"
-            style="background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer">
-            ${ta('p8BtnDelete')}
-          </button>
-        </td>
-      </tr>`);
-    });
-  }
   body.innerHTML = rows.join('');
+}
+
+async function saveAllPerBox() {
+  const inputs = [...document.querySelectorAll('.pb-input')].filter(inp => parseInt(inp.value) !== parseInt(inp.dataset.orig));
+  if (!inputs.length) { showToast('沒有修改'); return; }
+  showToast('⏳ 儲存中…');
+  const PRODUCTS_DEF = (typeof PRODUCTS_DEFAULT !== 'undefined') ? PRODUCTS_DEFAULT : [];
+  let ok = 0, fail = 0;
+  for (const inp of inputs) {
+    const id  = parseInt(inp.dataset.id);
+    const val = parseInt(inp.value) || 1;
+    const cp  = cachedCustomProducts.find(x => x.id === id);
+    if (cp) {
+      const { error } = await sb.from('custom_products').update({ per_box_default: val }).eq('id', id);
+      if (!error) { cp.per_box_default = val; inp.dataset.orig = val; inp.style.borderColor = 'var(--border)'; ok++; }
+      else fail++;
+    } else {
+      const def = PRODUCTS_DEF.find(x => x.id === id);
+      if (!def) continue;
+      const payload = { id, name: def.name, short_name: def.short || def.name.slice(0,4),
+        unit: def.unit, stock_unit: def.stockUnit || def.unit, cat: def.cat,
+        box_type: 'box', per_box_default: val, min_qty: def.minQty || 1, step: def.step || 1, is_active: true };
+      const { error } = await sb.from('custom_products').insert(payload);
+      if (!error) { cachedCustomProducts.push(payload); inp.dataset.orig = val; inp.style.borderColor = 'var(--border)'; ok++; }
+      else fail++;
+    }
+  }
+  if (fail) { showToast(`❌ ${fail} 項失敗`); return; }
+  showToast(`✅ 已儲存 ${ok} 項每箱數`);
+  rebuildProducts(); renderAll();
 }
 
 // ── 資料清理
