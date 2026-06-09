@@ -493,7 +493,7 @@ const PRODUCT_NAMES_JA = {
 };
 function tpName(p) { return (adminLang==='ja' && PRODUCT_NAMES_JA[p.id]) ? PRODUCT_NAMES_JA[p.id] : p.name; }
 
-const PRODUCTS = [
+let PRODUCTS = [
   { id:792,  name:'大阪燒',               short:'大阪燒', unit:'箱', cat:'冷凍', perBoxDefault:40, perBoxUnit:'片/箱' },
   { id:984,  name:'馬鈴薯燉肉',           short:'燉牛',   unit:'箱', cat:'冷凍', perBoxDefault:40, perBoxUnit:'人份/箱' },
   { id:908,  name:'韓式拌飯醬（360g/袋）', short:'拌飯醬', unit:'箱', cat:'冷凍', perBoxDefault:1,  perBoxUnit:'袋/箱' },
