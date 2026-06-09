@@ -421,13 +421,14 @@ tr:hover td { background: #f8fafc; }
       <div class="section-header">
         <h3>📋 品項列表</h3>
         <div style="display:flex;align-items:center;gap:10px">
-          <span style="font-size:12px;color:var(--muted)">每箱數可直接編輯後儲存</span>
+          <span style="font-size:12px;color:var(--muted)">每箱數可直接編輯；拖曳 ☰ 調整順序</span>
           <button onclick="saveAllPerBox()" style="background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">💾 儲存每箱數</button>
+          <button onclick="saveProductOrder()" style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">↕ 儲存排序</button>
         </div>
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>ID</th><th>品項名稱</th><th>縮寫</th><th>分類</th><th>訂貨單位</th><th>盤點單位</th><th class="c">箱裝方式</th><th class="c">拼裝數</th><th class="c">每箱數 ✎</th><th class="c">最低訂量</th><th class="c">狀態</th><th class="c">操作</th></tr></thead>
+          <thead><tr><th class="c" style="width:32px">↕</th><th>ID</th><th>品項名稱</th><th>縮寫</th><th>分類</th><th>訂貨單位</th><th>盤點單位</th><th class="c">箱裝方式</th><th class="c">拼裝數</th><th class="c">每箱數 ✎</th><th class="c">最低訂量</th><th class="c">狀態</th><th class="c">操作</th></tr></thead>
           <tbody id="productListBody"></tbody>
           <tfoot><tr><td colspan="12" style="padding:6px 10px;font-size:11px;color:var(--muted);background:#f8fafc">* 預設品項停用後門市不顯示；刪除後永久移除（自訂）或標記隱藏（預設）。</td></tr></tfoot>
         </table>
@@ -578,6 +579,7 @@ let cachedPerBox = {};
 let cachedCustomStores = [];
 let cachedDisabledStores = [];
 let cachedMinBoxes = {};   // { store_key: 最低箱數 }
+let cachedProductOrder = [];  // 品項排序（product ID 陣列）
 let allOrders = [];
 let lastWeekOrders = [];
 
@@ -740,16 +742,18 @@ async function startAdmin() {
 
   // Load global settings in parallel
   try {
-    const [pbRes, dsRes, csRes, mbRes] = await Promise.all([
+    const [pbRes, dsRes, csRes, mbRes, poRes] = await Promise.all([
       sb.from('settings').select('value').eq('key','per_box_settings').maybeSingle(),
       sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
       sb.from('custom_stores').select('*').order('code'),
       sb.from('settings').select('value').eq('key','min_boxes_settings').maybeSingle(),
+      sb.from('settings').select('value').eq('key','product_sort_order').maybeSingle(),
     ]);
     cachedPerBox = pbRes.data?.value || {};
     cachedDisabledStores = dsRes.data?.value || [];
     cachedCustomStores = csRes.data || [];
     cachedMinBoxes = { ...MIN_BOXES_INIT, ...(mbRes.data?.value || {}) };
+    cachedProductOrder = poRes.data?.value || [];
   } catch(e) { console.warn('Settings load error', e); }
 
   await Promise.all([loadData(), loadProductSettings()]);
@@ -1262,6 +1266,15 @@ function rebuildProducts() {
     special:p.special||false, noBox:p.no_box||false,
     minQty:p.min_qty>1?p.min_qty:undefined, step:p.step>1?p.step:(p.min_qty>1?p.min_qty:undefined), isCustom:true,
   }))];
+  // 套用自訂排序
+  if (cachedProductOrder.length) {
+    PRODUCTS.sort((a, b) => {
+      const ai = cachedProductOrder.indexOf(a.id), bi = cachedProductOrder.indexOf(b.id);
+      if (ai === -1 && bi === -1) return 0;
+      if (ai === -1) return 1; if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }
 }
 
 async function addCustomProduct() {
@@ -1452,7 +1465,15 @@ function renderProductList() {
   const allItems = [
     ...PRODUCTS_DEF.filter(p => !cpIds.has(p.id) && !cachedDeletedDefaults.includes(p.id)),
     ...cachedCustomProducts,
-  ].sort((a, b) => a.id - b.id);
+  ].sort((a, b) => {
+    if (cachedProductOrder.length) {
+      const ai = cachedProductOrder.indexOf(a.id), bi = cachedProductOrder.indexOf(b.id);
+      if (ai === -1 && bi === -1) return a.id - b.id;
+      if (ai === -1) return 1; if (bi === -1) return -1;
+      return ai - bi;
+    }
+    return a.id - b.id;
+  });
 
   allItems.forEach(item => {
     const isCustom  = cpIds.has(item.id);
@@ -1494,7 +1515,8 @@ function renderProductList() {
          <button onclick="toggleDefaultProduct(${item.id},${isDisabled})" style="background:${isDisabled?'#f0fdf4':'#fff7ed'};color:${isDisabled?'var(--green)':'var(--orange)'};border:1px solid ${isDisabled?'#86efac':'#fdba74'};border-radius:6px;padding:3px 7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:3px">${isDisabled?'啟用':'停用'}</button>
          <button onclick="showDeleteProductSQL(${item.id},'${item.name}')" style="background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:700;cursor:pointer">刪除</button>`;
 
-    rows.push(`<tr style="opacity:${isActive?'1':'0.5'}">
+    rows.push(`<tr data-prod-id="${item.id}" draggable="true" ondragstart="_pdDragStart(event)" ondragover="_pdDragOver(event)" ondrop="_pdDrop(event)" ondragend="_pdDragEnd(event)" style="opacity:${isActive?'1':'0.5'};cursor:default">
+      <td style="text-align:center;color:#94a3b8;cursor:grab;user-select:none;font-size:16px" title="拖曳排序">☰</td>
       <td style="font-family:monospace;font-weight:700;color:var(--primary)">${item.id}</td>
       <td><strong>${item.name}</strong>${nameBadge}</td>
       <td style="color:var(--muted)">${item.short_name||item.short||'—'}</td>
@@ -1514,6 +1536,47 @@ function renderProductList() {
   });
 
   body.innerHTML = rows.join('');
+}
+
+// ── 品項拖曳排序
+let _pdDragId = null;
+function _pdDragStart(e) {
+  _pdDragId = parseInt(e.currentTarget.dataset.prodId);
+  e.currentTarget.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+}
+function _pdDragEnd(e) {
+  e.currentTarget.style.opacity = '';
+  document.querySelectorAll('[data-prod-id]').forEach(r => r.style.borderTop = '');
+}
+function _pdDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('[data-prod-id]').forEach(r => r.style.borderTop = '');
+  e.currentTarget.style.borderTop = '2px solid #7c3aed';
+}
+function _pdDrop(e) {
+  e.preventDefault();
+  const targetId = parseInt(e.currentTarget.dataset.prodId);
+  if (!_pdDragId || _pdDragId === targetId) return;
+  // 從 DOM 讀取目前順序，插入新位置
+  const rows = [...document.querySelectorAll('[data-prod-id]')].map(r => parseInt(r.dataset.prodId));
+  const srcIdx = rows.indexOf(_pdDragId);
+  const tgtIdx = rows.indexOf(targetId);
+  rows.splice(srcIdx, 1);
+  rows.splice(tgtIdx, 0, _pdDragId);
+  cachedProductOrder = rows;
+  renderProductList();
+}
+
+async function saveProductOrder() {
+  const rows = [...document.querySelectorAll('[data-prod-id]')].map(r => parseInt(r.dataset.prodId));
+  if (!rows.length) { showToast('沒有品項'); return; }
+  const { error } = await sb.from('settings').upsert({ key: 'product_sort_order', value: rows, updated_at: new Date().toISOString() });
+  if (error) { showToast('❌ 儲存失敗'); return; }
+  cachedProductOrder = rows;
+  rebuildProducts(); renderAll();
+  showToast('✅ 排序已儲存');
 }
 
 async function saveAllPerBox() {

@@ -688,16 +688,18 @@ async function initMainApp(user, assignedStores) {
   const ss = document.getElementById('storeSelect');
   ss.innerHTML = '<option value="" id="optPlaceholderStore">選擇門市…</option>';
   try {
-    const [{ data: customStores }, { data: dsData }, { data: mbData }, { data: cpData }, { data: ddpData }] = await Promise.all([
+    const [{ data: customStores }, { data: dsData }, { data: mbData }, { data: cpData }, { data: ddpData }, { data: poData }] = await Promise.all([
       sb.from('custom_stores').select('code, key, is_active'),
       sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
       sb.from('settings').select('value').eq('key','min_boxes_settings').maybeSingle(),
       sb.from('custom_products').select('*').order('id'),
       sb.from('settings').select('value').eq('key','disabled_default_products').maybeSingle(),
+      sb.from('settings').select('value').eq('key','product_sort_order').maybeSingle(),
     ]);
     minBoxesSettings = mbData?.value || {};
     const disabled = dsData?.value || [];
     const disabledDefaults = ddpData?.value || [];
+    const productSortOrder = poData?.value || [];
     const allCp    = cpData || [];
     const activeCp = allCp.filter(p => p.is_active !== false);
     const cpOverrideIds = new Set(allCp.map(p => p.id)); // 含停用，避免停用品項從預設冒出
@@ -712,9 +714,10 @@ async function initMainApp(user, assignedStores) {
       cat: p.cat || '冷凍', special: p.special || false, noBox: p.no_box || false,
       minQty: p.min_qty > 1 ? p.min_qty : undefined, step: p.step > 1 ? p.step : (p.min_qty > 1 ? p.min_qty : undefined),
     }));
-    const defaultOrder = DEFAULT_PRODUCTS.map(p => p.id);
+    // 排序：優先使用後台設定的自訂順序，否則依 DEFAULT_PRODUCTS 原始順序
+    const refOrder = productSortOrder.length ? productSortOrder : DEFAULT_PRODUCTS.map(p => p.id);
     PRODUCTS = [...enabledDefaults, ...customMapped].sort((a, b) => {
-      const ai = defaultOrder.indexOf(a.id), bi = defaultOrder.indexOf(b.id);
+      const ai = refOrder.indexOf(a.id), bi = refOrder.indexOf(b.id);
       if (ai === -1 && bi === -1) return a.id - b.id;
       if (ai === -1) return 1; if (bi === -1) return -1;
       return ai - bi;
