@@ -863,6 +863,11 @@ function renderDetailTable() {
   const submitted=[...storeSet].sort((a,b)=>a.localeCompare(b));
   const BREAD_ID=1367;
 
+  // 計算本週截止時間（週一 10:00）
+  const wf2=document.getElementById('weekFilter');
+  const weekMonday = new Date(wf2.value + 'T00:00:00');
+  const weekDeadline = new Date(weekMonday); weekDeadline.setHours(10, 0, 0, 0);
+
   const rows=submitted.map(storeKey => {
     const o=orderMap[storeKey]; const oLast=lastMap[storeKey]; const data=o?.data||{};
     let rowTotal=0;
@@ -872,13 +877,24 @@ function renderDetailTable() {
       const extraStyle=p.id===BREAD_ID&&v>0?' style="color:var(--special);font-weight:800"':'';
       return `<td class="qc ${v>0?'on':'off'}"${extraStyle}>${v>0?v:'—'}</td>`;
     });
-    const time=o?.submitted_at?new Date(o.submitted_at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):(oLast?'僅餐包':'');
+
+    // 判斷是否截止後修改
+    const submittedAt = o?.submitted_at ? new Date(o.submitted_at) : null;
+    const isLateEdit = submittedAt && submittedAt > weekDeadline;
+    const timeStr = submittedAt
+      ? submittedAt.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})
+      : (oLast?'僅餐包':'');
+    const lateTag = isLateEdit
+      ? `<span style="display:inline-block;background:#fff7ed;color:#d97706;border:1px solid #fdba74;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:3px">⚠️ 截止後修改</span>`
+      : '';
+
     const submitter=o?.submitter_name||'—';
     const shortStore=storeKey.replace(/家樂福|日月光|米平方/g,s=>({'家樂福':'樂福','日月光':'日月','米平方':'米²'}[s]||s));
     const orderId = o?.id || null;
     const editBtn = orderId ? `<button onclick="editOrder('${storeKey}','${orderId}')" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;margin-right:3px">✏️</button>` : '';
     const delBtn  = orderId ? `<button onclick="deleteOrder('${storeKey}','${orderId}')" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer">🗑</button>` : '';
-    return `<tr id="row_${storeKey}"><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowTotal}</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted)">${time}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
+    const rowStyle = isLateEdit ? ' style="background:#fffbeb"' : '';
+    return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowTotal}</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
   });
 
   const colTotals=PRODUCTS.map(p=>p.id===BREAD_ID
