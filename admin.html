@@ -2262,7 +2262,18 @@ init();
       ? rows.join('')+'<tr class="total-row"><td colspan="4" style="font-weight:800">合計</td><td class="total-cell">'+tot+'</td><td colspan="2"></td></tr>'
       : '<tr><td colspan="7" style="text-align:center;padding:12px;color:var(--muted)">本週無訂單</td></tr>';
     var dm = document.getElementById('daiwaMsg');
-    if (dm) { dm.value = tot>0 ? '幫我預約，大榮貨運（台北車站-'+tot+'箱），謝謝' : ''; dm.placeholder = tot>0?'':'（本週無台北車站訂單）'; }
+    if (dm) {
+      if (tot > 0) {
+        var wfEl = document.getElementById('weekFilter');
+        var weekMon = wfEl ? new Date(wfEl.value + 'T00:00:00') : new Date();
+        var tue = new Date(weekMon); tue.setDate(tue.getDate() + 1);
+        var tueStr = (tue.getMonth()+1) + '/' + tue.getDate() + '（二）';
+        dm.value = '您好，請幫我預約，' + tueStr + '大榮貨運（台北車站' + tot + '箱），謝謝';
+      } else {
+        dm.value = '';
+      }
+      dm.placeholder = tot > 0 ? '' : '（本週無台北車站訂單）';
+    }
   };
 
   var _oRA = window.renderAll;
