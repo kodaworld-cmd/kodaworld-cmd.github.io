@@ -709,7 +709,7 @@ async function initMainApp(user, assignedStores) {
     PRODUCTS = [...enabledDefaults, ...activeCp.map(p => ({
       id: p.id, name: p.name, unit: p.unit || '箱', stockUnit: p.stock_unit || p.unit || '包',
       cat: p.cat || '冷凍', special: p.special || false, noBox: p.no_box || false,
-      minQty: p.min_qty > 1 ? p.min_qty : undefined, step: p.step > 1 ? p.step : undefined,
+      minQty: p.min_qty > 1 ? p.min_qty : undefined, step: p.step > 1 ? p.step : (p.min_qty > 1 ? p.min_qty : undefined),
     }))];
 
     // 預設門市
@@ -872,7 +872,7 @@ function renderProducts() {
         <div class="prod-row">
           <div>
             <div class="prod-name">${displayName}${isSpecial?`<span class="special-tag">${t('tagSpecial')}</span>`:''}</div>
-            <div class="prod-meta"><span class="prod-code">#${p.id}</span> · ${t('tagOrderUnit')}${p.unit}　${t('tagStockUnit')}${p.stockUnit||p.unit}${p.minQty?`　<span style="color:#d97706;font-weight:700">最低${p.minQty}，${p.step}的倍數</span>`:''}</div>
+            <div class="prod-meta"><span class="prod-code">#${p.id}</span> · ${t('tagOrderUnit')}${p.unit}　${t('tagStockUnit')}${p.stockUnit||p.unit}${p.minQty?`　<span style="color:#d97706;font-weight:700">最低${p.minQty}${p.step&&p.step>1?`，${p.step}的倍數`:''}</span>`:''}</div>
           </div>
           <div class="input-group">
             <div class="input-label-sm">${t('tagStockUnit')}${p.stockUnit||p.unit}</div>

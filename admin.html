@@ -1237,7 +1237,7 @@ function rebuildProducts() {
     perBoxDefault:p.per_box_default||1,
     perBoxUnit:`${p.stock_unit||p.unit}/${p.unit==='箱'?'箱':p.unit}`,
     special:p.special||false, noBox:p.no_box||false,
-    minQty:p.min_qty>1?p.min_qty:undefined, step:p.step>1?p.step:undefined, isCustom:true,
+    minQty:p.min_qty>1?p.min_qty:undefined, step:p.step>1?p.step:(p.min_qty>1?p.min_qty:undefined), isCustom:true,
   }))];
 }
 
@@ -1424,13 +1424,17 @@ function renderProductList() {
   const PRODUCTS_DEF = (typeof PRODUCTS_DEFAULT !== 'undefined') ? PRODUCTS_DEFAULT : PRODUCTS;
   const rows = [];
 
-  // 預設品項
-  rows.push(`<tr><td colspan="12" style="background:#f0fdf4;font-size:11px;font-weight:800;color:#15803d;padding:6px 10px;border-bottom:2px solid #86efac">${ta('p8DefaultGroup')}（${PRODUCTS_DEF.length} 項）</td></tr>`);
-  PRODUCTS_DEF.forEach(p => {
+  // 預設品項（已被自訂覆寫的不顯示，只在自訂品項區顯示）
+  const overriddenIds = new Set(cachedCustomProducts.map(x => x.id));
+  const visibleDefaults = PRODUCTS_DEF.filter(p => !overriddenIds.has(p.id));
+  const overriddenCount = PRODUCTS_DEF.length - visibleDefaults.length;
+  const overriddenNote = overriddenCount > 0 ? `　<span style="font-weight:400;color:#92400e">（${overriddenCount} 項已覆寫，見下方自訂品項）</span>` : '';
+  rows.push(`<tr><td colspan="12" style="background:#f0fdf4;font-size:11px;font-weight:800;color:#15803d;padding:6px 10px;border-bottom:2px solid #86efac">${ta('p8DefaultGroup')}（${visibleDefaults.length} 項）${overriddenNote}</td></tr>`);
+  visibleDefaults.forEach(p => {
     const isDisabled   = cachedDisabledDefaults.includes(p.id);
     const isDeleted    = cachedDeletedDefaults.includes(p.id);
-    const overrideCp   = cachedCustomProducts.find(x => x.id === p.id);
-    const isOverridden = !!overrideCp;
+    const overrideCp   = null;
+    const isOverridden = false;
     const state = isDeleted ? 'deleted' : isDisabled ? 'disabled' : 'active';
 
     // 若有自訂覆寫，顯示覆寫後的值；否則顯示預設值
@@ -1496,7 +1500,7 @@ function renderProductList() {
       const btTxt   = btLabel==='散貨拼箱'?'#92400e':btLabel==='不計箱'?'var(--red)':'var(--primary)';
       rows.push(`<tr style="${isActive?'':'opacity:0.45'}">
         <td style="font-family:monospace;font-weight:700;color:var(--primary)">${p.id}</td>
-        <td><strong>${p.name}</strong> <span style="background:#f0fdf4;color:#16a34a;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">自訂</span></td>
+        <td><strong>${p.name}</strong> ${overriddenIds.has(p.id)?'<span style="background:#fef3c7;color:#92400e;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">覆寫預設</span>':'<span style="background:#f0fdf4;color:#16a34a;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">新增</span>'}</td>
         <td style="color:var(--muted)">${p.short_name||'—'}</td>
         <td><span style="background:${p.cat==='冷凍'?'#e0f2fe':p.cat==='常温'?'#fef3c7':'#f5f3ff'};color:${p.cat==='冷凍'?'#0369a1':p.cat==='常温'?'#92400e':'var(--special)'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${p.cat}</span></td>
         <td>${p.unit}</td><td>${p.stock_unit||p.unit}</td>
