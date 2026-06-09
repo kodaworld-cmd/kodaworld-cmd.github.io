@@ -488,6 +488,16 @@ let sb;
 // ========================
 // 商品資料
 // ========================
+const PRODUCT_NAMES_JA = {
+  792:'お好み焼き', 984:'肉じゃが', 908:'ビビンバソース', 1047:'冷凍パスタ',
+  251:'すき焼きソース', 1198:'赤パプリカ', 1199:'黄パプリカ', 1161:'手作りチャーシュー',
+  735:'カレーソース', 262:'北海道ホワイトソース', 261:'かぼちゃスープ', 1154:'チーズソース',
+  1254:'ナポリソース', 1050:'ガーリックオイルソース', 1214:'ハーフカレーソース',
+  1282:'北海道シチュー', 1283:'手作りジェノベーゼ', 1315:'天ぷら海老', 1368:'天かす',
+  1051:'ステーキソルト', 1142:'グリーンメロンシロップ', 1367:'塩バターロール',
+};
+function tpName(p) { return (adminLang==='ja' && PRODUCT_NAMES_JA[p.id]) ? PRODUCT_NAMES_JA[p.id] : p.name; }
+
 const PRODUCTS = [
   { id:792,  name:'大阪燒',               short:'大阪燒', unit:'箱', cat:'冷凍', perBoxDefault:40, perBoxUnit:'片/箱' },
   { id:984,  name:'馬鈴薯燉肉',           short:'燉牛',   unit:'箱', cat:'冷凍', perBoxDefault:40, perBoxUnit:'人份/箱' },
@@ -820,13 +830,15 @@ function renderProdGrid() {
   const totals = {};
   allOrders.forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { totals[id]=(totals[id]||0)+(d.order||0); }));
   if (!allOrders.length) { document.getElementById('prodGrid').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>本週尚無訂單</div>'; return; }
+  const specialLabel = adminLang==='ja' ? '代理注文' : '代訂';
+  const totalLabel   = adminLang==='ja' ? '計' : '共';
   document.getElementById('prodGrid').innerHTML = PRODUCTS.map(p => {
     const boxes=totals[p.id]||0; const perBox=pb[p.id]||1; const units=boxes*perBox;
     const cls=p.special?'prod-sum special':boxes>0?'prod-sum active':'prod-sum';
     return `<div class="${cls}">
-      <div class="ps-name">${p.name}${p.special?'<span style="color:var(--special);font-size:10px;font-weight:700;margin-left:4px">代訂</span>':''}</div>
+      <div class="ps-name">${tpName(p)}${p.special?`<span style="color:var(--special);font-size:10px;font-weight:700;margin-left:4px">${specialLabel}</span>`:''}</div>
       <div class="ps-boxes">${boxes} <span style="font-size:12px;font-weight:400">${p.unit}</span></div>
-      ${!p.noBox&&p.unit==='箱'&&perBox>1?`<div class="ps-units">共 ${units} ${p.perBoxUnit||'個'}</div>`:''}
+      ${!p.noBox&&p.unit==='箱'&&perBox>1?`<div class="ps-units">${totalLabel} ${units} ${p.perBoxUnit||'個'}</div>`:''}
     </div>`;
   }).join('');
 }

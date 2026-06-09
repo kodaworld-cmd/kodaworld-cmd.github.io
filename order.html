@@ -368,7 +368,7 @@ const PRODUCT_NAMES_JA = {
 // ========================
 const T = {
   zh: {
-    title:'手作訂貨系統', deadlineNormal:'每週一 10:00 截止', deadlineUrgent:'⚠️ 截止倒數中！', deadlinePast:'❌ 已截止',
+    title:'手作訂貨系統', deadlineNormal:'每週一 10:00 截止', deadlineToday:'⏰ 今日 10:00 截止！', deadlineUrgent:'⚠️ 截止倒數中！', deadlinePast:'❌ 本週已截止',
     navOrder:'本週訂貨', navHistory:'訂貨紀錄',
     labelStore:'門市', labelName:'訂貨人姓名', placeholderStore:'選擇門市…', placeholderName:'請輸入姓名',
     regularLabel:'📦 一般品項配送日', regularNote:'本週四配送到門市',
@@ -400,7 +400,7 @@ const T = {
     breadNextWeek:'　＋下週餐包 {qty} 包',
   },
   ja: {
-    title:'手作発注システム', deadlineNormal:'毎週月曜 10:00 締め切り', deadlineUrgent:'⚠️ 締め切り間近！', deadlinePast:'❌ 締め切り済み',
+    title:'手作発注システム', deadlineNormal:'毎週月曜 10:00 締め切り', deadlineToday:'⏰ 本日 10:00 締め切り！', deadlineUrgent:'⚠️ 締め切り間近！', deadlinePast:'❌ 今週締め切り済み',
     navOrder:'今週の発注', navHistory:'発注履歴',
     labelStore:'店舗', labelName:'発注担当者名', placeholderStore:'店舗を選択…', placeholderName:'お名前を入力',
     regularLabel:'📦 通常商品 納品日', regularNote:'今週木曜日に配送',
@@ -765,9 +765,17 @@ async function initMainApp(user, assignedStores) {
 function checkDeadline() {
   const now = new Date(); const day = now.getDay(); const hour = now.getHours();
   const badge = document.getElementById('deadlineBadge');
-  if (day===1 && hour>=8 && hour<10) { badge.textContent=t('deadlineUrgent'); badge.classList.add('urgent'); }
-  else if (day===1 && hour>=10) { badge.textContent=t('deadlinePast'); badge.classList.add('urgent'); }
-  else { badge.textContent=t('deadlineNormal'); badge.classList.remove('urgent'); }
+  // 週一 08:00–09:59：倒數提醒（紅色閃爍）
+  if (day===1 && hour>=8 && hour<10)      { badge.textContent=t('deadlineUrgent'); badge.classList.add('urgent'); badge.style.background=''; }
+  // 週一 10:00 後 ＋ 週二 ＋ 週三：已截止（紅色常亮）
+  else if ((day===1 && hour>=10) || day===2 || day===3) {
+    badge.textContent=t('deadlinePast'); badge.classList.add('urgent');
+    badge.style.animation='none'; // 不閃，常亮紅
+  }
+  // 週一 00:00–07:59：今日截止提醒（橙色）
+  else if (day===1) { badge.textContent=t('deadlineToday'); badge.classList.remove('urgent'); badge.style.background='#f97316'; badge.style.color='#fff'; }
+  // 週四以後（切換下週）：正常顯示
+  else { badge.textContent=t('deadlineNormal'); badge.classList.remove('urgent'); badge.style.background=''; badge.style.color=''; }
 }
 
 function onStoreChange() {
@@ -949,21 +957,22 @@ function calcEstimatedBoxes() {
   PRODUCTS.forEach(p => {
     if (p.special) return;  // 餐包為代訂（下週四出貨），不計入本週箱數
     const qty = orderData[p.id]?.order || 0; if (!qty) return;
+    const pn = (currentLang==='ja' && PRODUCT_NAMES_JA[p.id]) ? PRODUCT_NAMES_JA[p.id] : p.name;
+    const pnShort = pn.length > 6 ? pn.slice(0,6) : pn;
+    const unitLabel = p.unit === '箱' ? (currentLang==='ja'?'箱':'箱') : p.unit;
     if (LOOSE_BOX.hasOwnProperty(p.id)) {
       const perBox = LOOSE_BOX[p.id];
       if (perBox === 0) {
-        // 牛排鹽：散裝塞別箱，不計算
-        saltItems.push(`${p.name.slice(0,4)} ×${qty}（散裝）`);
+        saltItems.push(`${pnShort} ×${qty}${currentLang==='ja'?'（バラ）':'（散裝）'}`);
       } else {
-        // 散裝品項：累計分數，最後合併進一批箱子
         looseFraction += qty / perBox;
-        looseItems.push(`${p.name.slice(0,4)} ×${qty}`);
+        looseItems.push(`${pnShort} ×${qty}`);
       }
     } else if (p.unit === '箱') {
       regularBoxes += qty;
-      regularBreakdown.push(`${p.name.slice(0,4)} ×${qty}箱`);
+      regularBreakdown.push(`${pnShort} ×${qty}${unitLabel}`);
     } else {
-      regularBreakdown.push(`${p.name.slice(0,4)} ×${qty}${p.unit}`);
+      regularBreakdown.push(`${pnShort} ×${qty}${p.unit}`);
     }
   });
 
@@ -971,7 +980,7 @@ function calcEstimatedBoxes() {
   if (lastWeekBreadQty > 0) {
     const perBox = LOOSE_BOX[1367] || 6;
     looseFraction += lastWeekBreadQty / perBox;
-    looseItems.push(`上週餐包 ×${lastWeekBreadQty}`);
+    looseItems.push(currentLang==='ja' ? `先週パン ×${lastWeekBreadQty}` : `上週餐包 ×${lastWeekBreadQty}`);
   }
 
   // 散裝品項合併為整箱（無論幾分之幾都進位為整箱）
@@ -980,7 +989,8 @@ function calcEstimatedBoxes() {
 
   const breakdown = [...regularBreakdown];
   if (looseBoxes > 0) {
-    breakdown.push(`散裝 ${looseBoxes}箱（${looseItems.join('、')}）`);
+    const looseLabel = currentLang==='ja' ? `バラ梱包 ${looseBoxes}箱（${looseItems.join('・')}）` : `散裝 ${looseBoxes}箱（${looseItems.join('、')}）`;
+    breakdown.push(looseLabel);
   }
   if (saltItems.length) {
     breakdown.push(...saltItems);
