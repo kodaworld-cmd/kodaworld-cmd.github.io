@@ -320,9 +320,10 @@ tr:hover td { background: #f8fafc; }
           <span style="font-size:12px;color:var(--muted)" id="storeCountLabel"></span>
         </div>
         <button onclick="saveMinBoxes()" style="background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">💾 儲存最低箱數</button>
+        <button onclick="saveStoreOrder()" style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">↕ 儲存排序</button>
       </div>
       <div class="table-wrap">
-        <table><thead><tr><th>代號</th><th>門市簡稱</th><th>完整名稱</th><th>區域</th><th>地址</th><th>電話</th><th class="c">最低箱</th><th class="c">狀態</th><th class="c">操作</th></tr></thead>
+        <table><thead><tr><th class="c" style="width:32px">↕</th><th>代號</th><th>門市簡稱</th><th>完整名稱</th><th>區域</th><th>地址</th><th>電話</th><th class="c">最低箱</th><th class="c">狀態</th><th class="c">操作</th></tr></thead>
         <tbody id="storeListBody"></tbody></table>
       </div>
     </div>
@@ -580,6 +581,7 @@ let cachedCustomStores = [];
 let cachedDisabledStores = [];
 let cachedMinBoxes = {};   // { store_key: 最低箱數 }
 let cachedProductOrder = [];  // 品項排序（product ID 陣列）
+let cachedStoreOrder   = [];  // 門市排序（store key 陣列）
 let allOrders = [];
 let lastWeekOrders = [];
 
@@ -742,18 +744,20 @@ async function startAdmin() {
 
   // Load global settings in parallel
   try {
-    const [pbRes, dsRes, csRes, mbRes, poRes] = await Promise.all([
+    const [pbRes, dsRes, csRes, mbRes, poRes, soRes] = await Promise.all([
       sb.from('settings').select('value').eq('key','per_box_settings').maybeSingle(),
       sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
       sb.from('custom_stores').select('*').order('code'),
       sb.from('settings').select('value').eq('key','min_boxes_settings').maybeSingle(),
       sb.from('settings').select('value').eq('key','product_sort_order').maybeSingle(),
+      sb.from('settings').select('value').eq('key','store_sort_order').maybeSingle(),
     ]);
     cachedPerBox = pbRes.data?.value || {};
     cachedDisabledStores = dsRes.data?.value || [];
     cachedCustomStores = csRes.data || [];
     cachedMinBoxes = { ...MIN_BOXES_INIT, ...(mbRes.data?.value || {}) };
     cachedProductOrder = poRes.data?.value || [];
+    cachedStoreOrder   = soRes.data?.value || [];
   } catch(e) { console.warn('Settings load error', e); }
 
   await Promise.all([loadData(), loadProductSettings()]);
@@ -1000,7 +1004,7 @@ function renderLogistics() {
   const lastMap={}; lastWeekOrders.forEach(o=>{lastMap[o.store_key]=o;});
   const frozenProds=PRODUCTS.filter(p=>p.cat==='冷凍');
   const ambientProds=PRODUCTS.filter(p=>p.cat==='常温');
-  const activeMaster=getActiveStoreMaster().sort((a,b)=>(a.code||'').localeCompare(b.code||''));
+  const activeMaster=_sortStores(getActiveStoreMaster());
 
   let frozenGrand=0, ambientGrand=0, totalGrand=0;
   const rows=activeMaster.map(sm=>{
@@ -1133,13 +1137,26 @@ async function saveMinBoxes() {
   showToast('✅ 最低箱數已儲存！');
 }
 
+function _sortStores(stores) {
+  if (cachedStoreOrder.length) {
+    return [...stores].sort((a, b) => {
+      const ai = cachedStoreOrder.indexOf(a.key), bi = cachedStoreOrder.indexOf(b.key);
+      if (ai === -1 && bi === -1) return (a.code||'99999').localeCompare(b.code||'99999');
+      if (ai === -1) return 1; if (bi === -1) return -1;
+      return ai - bi;
+    });
+  }
+  return [...stores].sort((a, b) => (a.code||'99999').localeCompare(b.code||'99999'));
+}
+
 function renderStoreList() {
-  const all=getEffectiveStoreMaster().sort((a,b)=>(a.code||'99999').localeCompare(b.code||'99999'));
+  const all=_sortStores(getEffectiveStoreMaster());
   const disabled=cachedDisabledStores;
   document.getElementById('storeCountLabel').textContent=`共 ${all.length} 家，${all.length-disabled.length} 家啟用中`;
   document.getElementById('storeListBody').innerHTML=all.map(s=>{
     const isDisabled=disabled.includes(s.key); const isCustom=!!s.isCustom;
-    return `<tr style="${isDisabled?'opacity:0.45':''}">
+    return `<tr data-store-key="${s.key}" draggable="true" ondragstart="_sdDragStart(event)" ondragover="_sdDragOver(event)" ondrop="_sdDrop(event)" ondragend="_sdDragEnd(event)" style="${isDisabled?'opacity:0.45':''}">
+      <td style="text-align:center;color:#94a3b8;cursor:grab;user-select:none;font-size:16px" title="拖曳排序">☰</td>
       <td style="font-family:monospace;font-weight:700;color:var(--primary)">${s.code||'—'}</td>
       <td><strong>${s.key}</strong></td>
       <td style="color:var(--muted);font-size:12px">${s.fullName||''}</td>
@@ -1165,7 +1182,7 @@ function exportCSV() {
   const pb=getPerBox();
   const orderMap={}; allOrders.forEach(o=>{orderMap[o.store_key]=o;});
   const lastMap={}; lastWeekOrders.forEach(o=>{lastMap[o.store_key]=o;});
-  const activeMaster=getActiveStoreMaster().sort((a,b)=>(a.code||'').localeCompare(b.code||''));
+  const activeMaster=_sortStores(getActiveStoreMaster());
   const submitted=activeMaster.filter(s=>orderMap[s.key]||lastMap[s.key]);
   const BREAD_ID=1367;
 
@@ -1198,7 +1215,7 @@ function exportLogisticsCSV() {
   const orderMap={}; allOrders.forEach(o=>{orderMap[o.store_key]=o;});
   const frozenProds=PRODUCTS.filter(p=>p.cat==='冷凍');
   const ambientProds=PRODUCTS.filter(p=>p.cat==='常温');
-  const activeMaster=getActiveStoreMaster().sort((a,b)=>(a.code||'').localeCompare(b.code||''));
+  const activeMaster=_sortStores(getActiveStoreMaster());
 
   const rows=[
     [`甫運物流出貨單－${weekLabel}，台灣珍有福（中央廚房）`],[],
@@ -1536,6 +1553,44 @@ function renderProductList() {
   });
 
   body.innerHTML = rows.join('');
+}
+
+// ── 門市拖曳排序
+let _sdDragKey = null;
+function _sdDragStart(e) {
+  _sdDragKey = e.currentTarget.dataset.storeKey;
+  e.currentTarget.style.opacity = '0.4';
+  e.dataTransfer.effectAllowed = 'move';
+}
+function _sdDragEnd(e) {
+  e.currentTarget.style.opacity = '';
+  document.querySelectorAll('[data-store-key]').forEach(r => r.style.borderTop = '');
+}
+function _sdDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('[data-store-key]').forEach(r => r.style.borderTop = '');
+  e.currentTarget.style.borderTop = '2px solid #7c3aed';
+}
+function _sdDrop(e) {
+  e.preventDefault();
+  const targetKey = e.currentTarget.dataset.storeKey;
+  if (!_sdDragKey || _sdDragKey === targetKey) return;
+  const rows = [...document.querySelectorAll('[data-store-key]')].map(r => r.dataset.storeKey);
+  const si = rows.indexOf(_sdDragKey), ti = rows.indexOf(targetKey);
+  rows.splice(si, 1); rows.splice(ti, 0, _sdDragKey);
+  cachedStoreOrder = rows;
+  renderStoreList();
+}
+
+async function saveStoreOrder() {
+  const rows = [...document.querySelectorAll('[data-store-key]')].map(r => r.dataset.storeKey);
+  if (!rows.length) { showToast('沒有門市'); return; }
+  const { error } = await sb.from('settings').upsert({ key: 'store_sort_order', value: rows, updated_at: new Date().toISOString() });
+  if (error) { showToast('❌ 儲存失敗'); return; }
+  cachedStoreOrder = rows;
+  showToast('✅ 門市排序已儲存');
+  renderAll();
 }
 
 // ── 品項拖曳排序
