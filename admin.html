@@ -1737,9 +1737,14 @@ async function loadUserList() {
   body.innerHTML = profiles.map(p => {
     const stores = accessMap[p.id] || [];
     const userRole = p.role || (p.is_admin ? 'admin' : 'store');
-    const storeChips = stores.map(s =>
-      `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border-radius:10px;padding:1px 7px;font-size:11px;margin:1px;${isSuperAdmin?'cursor:pointer':''}" ${isSuperAdmin?`onclick="revokeStore('${p.id}','${s}')" title="點擊移除"`:''}>${s}${isSuperAdmin?' ✕':''}</span>`
-    ).join('');
+    const chipHtml = s => `<span style="display:inline-block;background:#eff6ff;color:#1d4ed8;border-radius:10px;padding:1px 7px;font-size:11px;margin:1px;${isSuperAdmin?'cursor:pointer':''}" ${isSuperAdmin?`onclick="revokeStore('${p.id}','${s}')" title="點擊移除"`:''}>${s}${isSuperAdmin?' ✕':''}</span>`;
+    const SHOW = 3;
+    const visibleChips = stores.slice(0, SHOW).map(chipHtml).join('');
+    const hiddenChips  = stores.length > SHOW ? stores.slice(SHOW).map(chipHtml).join('') : '';
+    const moreBtn = stores.length > SHOW
+      ? `<span id="more_${p.id}" onclick="toggleStoreChips('${p.id}')" style="display:inline-block;background:#f1f5f9;color:#64748b;border-radius:10px;padding:1px 8px;font-size:11px;margin:1px;cursor:pointer">…及${stores.length - SHOW}家 ▾</span><span id="hidden_${p.id}" style="display:none">${hiddenChips}</span>`
+      : '';
+    const storeChips = visibleChips + moreBtn;
     const unassigned = effectiveStores.filter(s => !stores.includes(s));
     const storeOptions = (unassigned.length ? `<option value="__ALL__" style="font-weight:700;color:#7c3aed">&#11088; 全門市（一次指派所有）</option>` : '') + unassigned.map(s => `<option value="${s}">${s}</option>`).join('');
     const created = new Date(p.created_at).toLocaleDateString('zh-TW');
@@ -1788,6 +1793,15 @@ async function grantStore(userId) {
   if (error) { showToast('❌ 指派失敗'); return; }
   showToast(`✅ 已指派 ${storeKey}`);
   loadUserList();
+}
+
+function toggleStoreChips(userId) {
+  const hidden = document.getElementById('hidden_' + userId);
+  const btn    = document.getElementById('more_' + userId);
+  if (!hidden) return;
+  const isOpen = hidden.style.display !== 'none';
+  hidden.style.display = isOpen ? 'none' : 'inline';
+  if (btn) btn.textContent = isOpen ? btn.textContent.replace('▴','▾') : btn.textContent.replace('▾','▴');
 }
 
 async function revokeStore(userId, storeKey) {
