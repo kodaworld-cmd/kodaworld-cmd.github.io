@@ -1327,10 +1327,11 @@ function generateShippingOrders() {
   const wf = document.getElementById('weekFilter');
   const weekKey = wf.value;
 
-  // 出貨週次的星期四（週一 + 3 天，對應 weekFilter 顯示的出貨日）
+  // 出貨週次的星期三（週一 + 2 天）
   const mon    = new Date(weekKey + 'T00:00:00');
-  const thu    = new Date(mon); thu.setDate(mon.getDate() + 3);
-  const dateStr = `${thu.getMonth()+1}/${thu.getDate()}`;
+  const wed    = new Date(mon); wed.setDate(mon.getDate() + 2);
+  const dateStr    = `${wed.getMonth()+1}/${wed.getDate()}`;
+  const fileDateStr = `${wed.getFullYear()}${String(wed.getMonth()+1).padStart(2,'0')}${String(wed.getDate()).padStart(2,'0')}`;
 
   const storeMaster  = getEffectiveStoreMaster();
   const sortedStores = _sortStores(storeMaster).filter(s => allOrders.find(o => o.store_key === s.key));
@@ -1383,7 +1384,7 @@ function generateShippingOrders() {
       </table>
     </div>`).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>JOYFULL出貨單</title>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>JOYFULL出貨單_${fileDateStr}</title>
 <style>
 @page{size:A4 portrait;margin:10mm}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1391,7 +1392,7 @@ body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt}
 .page{width:100%;page-break-after:always}
 .page:last-child{page-break-after:auto}
 .title{font-size:22pt;font-weight:bold;text-align:center;border:2.5px solid #000;padding:6px 0;margin-bottom:2px}
-table{width:100%;border-collapse:collapse}
+table{width:100%;border-collapse:collapse;border:2.5px solid #000}
 td{padding:3px 6px;font-size:13pt;vertical-align:middle}
 .lbl{white-space:nowrap;width:52px}
 .sname{font-size:17pt;font-weight:bold}
@@ -1403,7 +1404,7 @@ td{padding:3px 6px;font-size:13pt;vertical-align:middle}
 .prod{border-right:1px solid #000}
 .qty{width:52px;border-right:1px solid #000}
 .batch{width:80px;border-right:2.5px solid #000}
-tr:not(.hdr):not(.foot) td{height:25px;border-top:1px solid #aaa;border-bottom:1px solid #aaa;border-left:none;border-right:none}
+tr:not(.hdr):not(.foot) td{height:38px;font-size:20pt;border-top:1px solid #aaa;border-bottom:1px solid #aaa;border-left:none;border-right:none}
 tr:not(.hdr):not(.foot) td.box{border-left:2.5px solid #000;border-right:1px solid #000}
 tr:not(.hdr):not(.foot) td.prod{border-right:1px solid #000}
 tr:not(.hdr):not(.foot) td.qty{border-right:1px solid #000}
