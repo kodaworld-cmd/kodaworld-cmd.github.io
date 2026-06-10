@@ -562,7 +562,7 @@ const STORE_MASTER_DEFAULT = [
   { code:'00033', key:'台中青海',   fullName:'珍有福 台中青海店',     region:'中',  address:'台中市西屯區青海路二段207-18號B1',phone:'04-2706-0528' },
   { code:'00034', key:'高雄光華',   fullName:'珍有福 高雄光華店',     region:'南1', address:'高雄市前鎮區光華二路157號1樓',     phone:'07-339-3899' },
   { code:'00036', key:'三重溪尾',   fullName:'珍有福 三重溪尾店',     region:'北1', address:'新北市三重區溪尾街125號',          phone:'02-2984-0086' },
-  { code:'00037', key:'小碧潭京站', fullName:'珍有福 小碧潭京站店',   region:'北1', address:'（待補）',                         phone:'（待補）' },
+  { code:'00037', key:'小碧潭京站', fullName:'珍有福 小碧潭京站店',   region:'北1', address:'新北市新店區中央路157號5樓(京站時尚廣場-小碧潭店)', phone:'02-8913-6881' },
 ];
 
 // ========================
@@ -582,6 +582,7 @@ let cachedDisabledStores = [];
 let cachedMinBoxes = {};   // { store_key: 最低箱數 }
 let cachedProductOrder = [];  // 品項排序（product ID 陣列）
 let cachedStoreOrder   = [];  // 門市排序（store key 陣列）
+let cachedStoreOverrides = {}; // { store_key: { address, phone, fullName, region } }
 let allOrders = [];
 let lastWeekOrders = [];
 
@@ -591,11 +592,22 @@ function getMinBoxes(key) { return cachedMinBoxes[key] ?? MIN_BOXES_DEFAULT; }
 
 // Build effective store master
 function getEffectiveStoreMaster() {
-  return [...STORE_MASTER_DEFAULT, ...cachedCustomStores.map(s=>({
+  const defaults = STORE_MASTER_DEFAULT.map(s => {
+    const ov = cachedStoreOverrides[s.key] || {};
+    return {
+      ...s,
+      fullName: ov.fullName || s.fullName,
+      region:   ov.region   || s.region,
+      address:  ov.address  || s.address,
+      phone:    ov.phone    || s.phone,
+    };
+  });
+  const customs = cachedCustomStores.map(s => ({
     code: s.code, key: s.key, fullName: s.full_name||s.key,
     region: s.region||'中', address: s.address||'（待補）', phone: s.phone||'（待補）',
     isCustom: true, is_active: s.is_active
-  }))];
+  }));
+  return [...defaults, ...customs];
 }
 function getActiveStoreMaster() {
   return getEffectiveStoreMaster().filter(s => !cachedDisabledStores.includes(s.key) && (s.is_active !== false));
@@ -751,19 +763,21 @@ async function startAdmin() {
 
   // Load global settings in parallel
   try {
-    const [pbRes, dsRes, csRes, mbRes, poRes, soRes] = await Promise.all([
+    const [pbRes, dsRes, csRes, mbRes, poRes, soRes, siRes] = await Promise.all([
       sb.from('settings').select('value').eq('key','per_box_settings').maybeSingle(),
       sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
       sb.from('custom_stores').select('*').order('code'),
       sb.from('settings').select('value').eq('key','min_boxes_settings').maybeSingle(),
       sb.from('settings').select('value').eq('key','product_sort_order').maybeSingle(),
       sb.from('settings').select('value').eq('key','store_sort_order').maybeSingle(),
+      sb.from('settings').select('value').eq('key','store_info_overrides').maybeSingle(),
     ]);
     cachedPerBox = pbRes.data?.value || {};
     cachedDisabledStores = dsRes.data?.value || [];
     cachedCustomStores = csRes.data || [];
     cachedMinBoxes = { ...MIN_BOXES_INIT, ...(mbRes.data?.value || {}) };
     cachedProductOrder = poRes.data?.value || [];
+    cachedStoreOverrides = siRes.data?.value || {};
     cachedStoreOrder   = soRes.data?.value || [];
   } catch(e) { console.warn('Settings load error', e); }
 
@@ -1107,6 +1121,84 @@ async function addStore() {
   renderStoreList(); renderAll();
 }
 
+function editStore(key) {
+  const master = getEffectiveStoreMaster().find(s => s.key === key);
+  if (!master) return;
+  const existing = document.getElementById('editStoreModal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'editStoreModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;max-width:480px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div style="font-size:16px;font-weight:800">✏️ 編輯門市資料</div>
+        <button onclick="document.getElementById('editStoreModal').remove()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8">✕</button>
+      </div>
+      <div style="background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--muted)">
+        <strong style="color:var(--text)">${master.code} ${master.key}</strong>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">完整名稱</label>
+          <input id="es_fullName" value="${master.fullName||''}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">區域</label>
+          <select id="es_region" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;background:#fff">
+            ${['北1','北2','中','南1','南2'].map(r=>`<option value="${r}" ${master.region===r?'selected':''}>${r}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">地址</label>
+        <input id="es_address" value="${master.address||''}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+      </div>
+      <div style="margin-bottom:20px">
+        <label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">電話</label>
+        <input id="es_phone" value="${master.phone||''}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+      </div>
+      <div style="display:flex;gap:10px">
+        <button onclick="saveStoreEdit('${key}')" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存</button>
+        <button onclick="document.getElementById('editStoreModal').remove()" style="padding:11px 20px;border:1.5px solid var(--border);background:#fff;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;color:var(--muted)">取消</button>
+      </div>
+      <div id="editStoreMsg" style="margin-top:10px;font-size:13px;text-align:center"></div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+async function saveStoreEdit(key) {
+  const fullName = document.getElementById('es_fullName').value.trim();
+  const region   = document.getElementById('es_region').value;
+  const address  = document.getElementById('es_address').value.trim();
+  const phone    = document.getElementById('es_phone').value.trim();
+  const msg      = document.getElementById('editStoreMsg');
+  msg.style.color = '#64748b'; msg.textContent = '儲存中…';
+
+  const master = getEffectiveStoreMaster().find(s => s.key === key);
+  if (master?.isCustom) {
+    // 自訂門市 → 直接更新 custom_stores
+    const { error } = await sb.from('custom_stores')
+      .update({ full_name: fullName, region, address, phone })
+      .eq('key', key);
+    if (error) { msg.style.color='#dc2626'; msg.textContent='❌ 儲存失敗：'+error.message; return; }
+    const idx = cachedCustomStores.findIndex(s => s.key === key);
+    if (idx !== -1) cachedCustomStores[idx] = { ...cachedCustomStores[idx], full_name: fullName, region, address, phone };
+  } else {
+    // 內建門市 → 儲存到 store_info_overrides
+    cachedStoreOverrides[key] = { fullName, region, address, phone };
+    const { error } = await sb.from('settings').upsert(
+      { key: 'store_info_overrides', value: cachedStoreOverrides, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+    if (error) { msg.style.color='#dc2626'; msg.textContent='❌ 儲存失敗：'+error.message; return; }
+  }
+
+  msg.style.color = '#16a34a'; msg.textContent = '✅ 已儲存';
+  setTimeout(() => { document.getElementById('editStoreModal')?.remove(); renderStoreList(); }, 800);
+}
+
 async function toggleStore(key) {
   const sm = getEffectiveStoreMaster().find(s=>s.key===key);
   const isDisabled = cachedDisabledStores.includes(key);
@@ -1173,6 +1265,7 @@ function renderStoreList() {
       <td style="text-align:center"><input type="number" min="1" id="mb_${s.key.replace(/[^a-z0-9]/gi,'_')}" value="${getMinBoxes(s.key)}" style="width:48px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;text-align:center" title="${s.key} 最低出貨箱數"></td>
       <td style="text-align:center"><span style="background:${isDisabled?'#fee2e2':'#f0fdf4'};color:${isDisabled?'var(--red)':'var(--green)'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${isDisabled?'停用':'啟用'}</span></td>
       <td style="text-align:center;white-space:nowrap">
+        <button onclick="editStore('${s.key}')" style="background:#f0fdf4;color:var(--green);border:1px solid #86efac;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px">✏️ 編輯</button>
         <button onclick="toggleStore('${s.key}')" style="background:${isDisabled?'#f0fdf4':'#fff7ed'};color:${isDisabled?'var(--green)':'var(--orange)'};border:1px solid ${isDisabled?'#86efac':'#fdba74'};border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px">${isDisabled?'啟用':'停用'}</button>
         ${isCustom?`<button onclick="deleteCustomStore('${s.key}')" style="background:#fff;color:var(--red);border:1px solid #fca5a5;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer">刪除</button>`:'<span style="font-size:11px;color:#cbd5e0">內建</span>'}
       </td>
