@@ -562,7 +562,10 @@ async function doRegister() {
   msg.style.color='#64748b'; msg.textContent='送出中…';
   const { data: signUpData, error } = await sb.auth.signUp({
     email, password,
-    options: { data: { display_name: name, requested_store: requestedStore } }
+    options: {
+      data: { display_name: name, requested_store: requestedStore },
+      emailRedirectTo: window.location.href.split('?')[0].split('#')[0],
+    }
   });
   if (error) { msg.style.color='#dc2626'; msg.textContent='申請失敗：' + error.message; return; }
   if (signUpData?.user) {
@@ -594,9 +597,22 @@ async function loadUserAndStart(user) {
   const nameInput = document.getElementById('submitterName');
   if (nameInput && profileData?.display_name) { nameInput.value = profileData.display_name; }
 
-  // 若 profile 裡缺少 requested_store，從 auth metadata 補寫（signup 時已存在 user_metadata）
+  // 若 profile 根本不存在（signup 時 RLS 擋掉 upsert），登入後補建整筆
   const metaStore = user.user_metadata?.requested_store;
-  if (profileData && !profileData.requested_store && metaStore) {
+  const metaName  = user.user_metadata?.display_name || '';
+  if (!profileData) {
+    await sb.from('user_profiles').upsert({
+      id: user.id, email: user.email,
+      display_name: metaName,
+      requested_store: metaStore || '',
+      is_admin: false,
+    }, { onConflict: 'id' });
+    if (metaName) {
+      const nameInput = document.getElementById('submitterName');
+      if (nameInput) nameInput.value = metaName;
+    }
+  } else if (!profileData.requested_store && metaStore) {
+    // profile 存在但缺 requested_store → 只補欄位
     await sb.from('user_profiles').update({ requested_store: metaStore }).eq('id', user.id);
   }
 
