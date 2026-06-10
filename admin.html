@@ -1369,23 +1369,23 @@ function generateShippingOrders() {
 
   const pagesHtml = pages.map(({ store, rows, dateStr, storeBoxes }) => `
     <div class="page">
-      <div class="title">JOYFULL中央廚房出貨單</div>
-      <table class="info-tbl">
-        <tr>
-          <td class="lbl">TO：</td>
-          <td class="sname" colspan="2">${store.fullName || store.key}<span class="region">（${store.region}）</span></td>
-          <td class="date">日期：${dateStr}</td>
-        </tr>
-        <tr>
-          <td class="lbl">地址：</td>
-          <td colspan="3" class="addr">${store.address || '（待補）'}</td>
-        </tr>
-        <tr>
-          <td class="lbl">電話：</td>
-          <td colspan="3">${store.phone || '（待補）'}</td>
-        </tr>
-      </table>
-      <div class="grid-wrap">
+      <div class="page-inner">
+        <div class="title">JOYFULL中央廚房出貨單</div>
+        <table class="info-tbl">
+          <tr>
+            <td class="lbl">TO：</td>
+            <td class="sname" colspan="2">${store.fullName || store.key}<span class="region">（${store.region}）</span></td>
+            <td class="date">日期：${dateStr}</td>
+          </tr>
+          <tr>
+            <td class="lbl">地址：</td>
+            <td colspan="3" class="addr">${store.address || '（待補）'}</td>
+          </tr>
+          <tr>
+            <td class="lbl">電話：</td>
+            <td colspan="3">${store.phone || '（待補）'}</td>
+          </tr>
+        </table>
         <table class="grid-tbl">
           <tr class="hdr">
             <td class="c">箱碼</td><td>產品名稱</td><td class="c">數量</td><td class="c">批號</td>
@@ -1401,29 +1401,29 @@ function generateShippingOrders() {
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>JOYFULL出貨單_${fileDateStr}</title>
 <style>
-@page{size:A4 portrait;margin:10mm}
+@page{size:A4 portrait;margin:12mm 10mm}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt}
-.page{width:100%;height:277mm;display:flex;flex-direction:column;page-break-after:always;overflow:hidden}
+.page{position:relative;width:100%;height:273mm;overflow:hidden;page-break-after:always}
 .page:last-child{page-break-after:auto}
-.title{font-size:22pt;font-weight:bold;text-align:center;padding:4px 0;margin-bottom:3px;flex-shrink:0}
-.info-tbl{width:100%;border-collapse:collapse;flex-shrink:0}
+.page-inner{padding-bottom:24mm}
+.title{font-size:22pt;font-weight:bold;text-align:center;padding:4px 0;margin-bottom:3px}
+.info-tbl{width:100%;border-collapse:collapse}
 td{padding:2px 6px;vertical-align:middle}
 .lbl{white-space:nowrap;width:60px;font-size:13pt}
 .sname{font-size:17pt;font-weight:bold}
 .date{text-align:right;white-space:nowrap;font-size:12pt}
 .addr{font-size:12pt}
 .region{font-size:12pt;font-weight:normal;color:#444;margin-left:4px}
-.grid-wrap{flex:1;min-height:0;overflow:hidden;margin-top:3px}
-.grid-tbl{width:100%;border-collapse:collapse;border:2.5px solid #000}
+.grid-tbl{width:100%;border-collapse:collapse;border:2.5px solid #000;margin-top:3px}
 .hdr td{font-size:14pt;font-weight:bold;padding:4px 6px;border-bottom:1px solid #000;text-align:center}
 .box{width:60px;border-right:1px solid #000}
 .prod{border-right:1px solid #000}
 .qty{width:60px;border-right:1px solid #000}
 .batch{width:90px}
-.has-item td{font-size:28pt;height:42px;border-bottom:1px solid #aaa}
-.empty-item td{font-size:28pt;height:42px}
-.foot-bar{flex-shrink:0;display:flex;justify-content:space-between;align-items:center;border-top:2.5px solid #000;padding:6px 10px;font-size:38pt;font-weight:bold}
+.has-item td{font-size:26pt;height:38px;border-bottom:1px solid #aaa}
+.empty-item td{font-size:26pt;height:38px}
+.foot-bar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;border-top:2.5px solid #000;padding:4px 10px;font-size:34pt;font-weight:bold;background:#fff}
 </style></head><body>${pagesHtml}</body></html>`;
 
   const win = window.open('', '_blank');
