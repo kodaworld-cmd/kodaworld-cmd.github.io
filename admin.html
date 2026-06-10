@@ -2219,7 +2219,7 @@ init();
     if (!storeKey) return;
     if (storeKey === '__ALL__') {
       if (!confirm('確定一次指派所有門市給此使用者？')) return;
-      var eff = (window.ALL_STORE_KEYS || []).concat((window.cachedCustomStores || []).map(function(s){ return s.key; }));
+      var eff = (typeof ALL_STORE_KEYS !== 'undefined' ? ALL_STORE_KEYS : []).concat((typeof cachedCustomStores !== 'undefined' ? cachedCustomStores : []).map(function(s){ return s.key; }));
       var r0 = await sb.from('user_store_access').select('store_key').eq('user_id', userId);
       var has = new Set((r0.data || []).map(function(x){ return x.store_key; }));
       var toAdd = eff.filter(function(s){ return !has.has(s); }).map(function(s){ return { user_id: userId, store_key: s }; });
