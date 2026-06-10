@@ -950,16 +950,23 @@ function renderDetailTable() {
 const LOOSE_BOX_ADMIN_DEFAULT = { 1051:0, 1368:10, 1367:6, 1142:6, 1283:100, 1050:200 };
 
 function calcOrderBoxes(data) {
+  return _calcBoxesByCat(data, null); // 全品項
+}
+function calcCatBoxes(data, cat) {
+  return _calcBoxesByCat(data, cat);  // 指定分類
+}
+function _calcBoxesByCat(data, cat) {
   let regularBoxes = 0;
   let looseFraction = 0;
   PRODUCTS.forEach(p => {
-    if (p.special) return; // 代訂餐包不計入本週箱數
+    if (p.special) return; // 代訂餐包不計
+    if (cat && p.cat !== cat) return;
     const qty = (data[p.id]?.order) || 0;
     if (!qty) return;
     if (LOOSE_BOX_ADMIN_DEFAULT.hasOwnProperty(p.id)) {
       const perBox = LOOSE_BOX_ADMIN_DEFAULT[p.id];
       if (perBox > 0) looseFraction += qty / perBox;
-      // perBox===0（牛排鹽）= 散裝塞入其他箱，不另計
+      // perBox===0（牛排鹽）= 散裝，不另計
     } else if (p.unit === '箱') {
       regularBoxes += qty;
     }
@@ -1055,8 +1062,8 @@ function renderLogistics() {
     const o=orderMap[sm.key];
     if (!o) return `<tr><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
     const data=o.data||{};
-    const frozen=frozenProds.reduce((s,p)=>s+(data[p.id]?.order||0),0);
-    const ambient=ambientProds.reduce((s,p)=>s+(data[p.id]?.order||0),0);
+    const frozen = calcCatBoxes(data, '冷凍');
+    const ambient = calcCatBoxes(data, '常温');
     const total=frozen+ambient;
     frozenGrand+=frozen; ambientGrand+=ambient; totalGrand+=total;
     return `<tr><td><span class="region-badge">${sm.region}</span></td><td><strong>${sm.fullName||sm.key}</strong></td><td class="${frozen>0?'frozen-cell':'zero-cell'}">${frozen>0?frozen:'—'}</td><td class="${ambient>0?'ambient-cell':'zero-cell'}">${ambient>0?ambient:'—'}</td><td class="${total>0?'total-cell':'zero-cell'}">${total>0?total:'—'}</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
@@ -1342,24 +1349,28 @@ function generateShippingOrders() {
     if (!order) return;
     const rows = _buildShipRows(order);
     if (rows.every(r => !r)) return; // 全空略過
-    pages.push({ store, rows, dateStr });
+    const storeBoxes = calcOrderBoxes(order.data || {});
+    pages.push({ store, rows, dateStr, storeBoxes });
   });
 
   if (!pages.length) { showToast('沒有可生成的門市訂單'); return; }
 
-  // 組 HTML
-  const rowsHtml = (rows) => rows.map(name => `
-    <tr>
+  // 組 HTML（有品項才加橫線）
+  const rowsHtml = (rows) => rows.map(name => {
+    const has = !!(name && name.trim());
+    const esc = name ? name.replace(/&/g,'&amp;').replace(/</g,'&lt;') : '';
+    return `<tr class="${has?'has-item':'empty-item'}">
       <td class="c box"></td>
-      <td class="prod">${name ? name.replace(/&/g,'&amp;').replace(/</g,'&lt;') : ''}</td>
+      <td class="prod">${esc}</td>
       <td class="c qty"></td>
       <td class="c batch"></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
-  const pagesHtml = pages.map(({ store, rows, dateStr }) => `
+  const pagesHtml = pages.map(({ store, rows, dateStr, storeBoxes }) => `
     <div class="page">
       <div class="title">JOYFULL中央廚房出貨單</div>
-      <table>
+      <table class="info-tbl">
         <tr>
           <td class="lbl">TO：</td>
           <td class="sname" colspan="2">${store.fullName || store.key}<span class="region">（${store.region}）</span></td>
@@ -1373,15 +1384,19 @@ function generateShippingOrders() {
           <td class="lbl">電話：</td>
           <td colspan="3">${store.phone || '（待補）'}</td>
         </tr>
-        <tr class="hdr">
-          <td class="c">箱碼</td><td>產品名稱</td><td class="c">數量</td><td class="c">批號</td>
-        </tr>
-        ${rowsHtml(rows)}
-        <tr class="foot">
-          <td colspan="2">共計箱數：</td>
-          <td colspan="2">司機簽收：</td>
-        </tr>
       </table>
+      <div class="grid-wrap">
+        <table class="grid-tbl">
+          <tr class="hdr">
+            <td class="c">箱碼</td><td>產品名稱</td><td class="c">數量</td><td class="c">批號</td>
+          </tr>
+          ${rowsHtml(rows)}
+        </table>
+      </div>
+      <div class="foot-bar">
+        <span>共計箱數：${storeBoxes} 箱</span>
+        <span>司機簽收：</span>
+      </div>
     </div>`).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>JOYFULL出貨單_${fileDateStr}</title>
@@ -1389,30 +1404,26 @@ function generateShippingOrders() {
 @page{size:A4 portrait;margin:10mm}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt}
-.page{width:100%;page-break-after:always}
+.page{width:100%;height:277mm;display:flex;flex-direction:column;page-break-after:always}
 .page:last-child{page-break-after:auto}
-.title{font-size:22pt;font-weight:bold;text-align:center;border:2.5px solid #000;padding:6px 0;margin-bottom:2px}
-table{width:100%;border-collapse:collapse;border:2.5px solid #000}
-td{padding:3px 6px;font-size:13pt;vertical-align:middle}
-.lbl{white-space:nowrap;width:52px}
+.title{font-size:22pt;font-weight:bold;text-align:center;padding:6px 0;margin-bottom:4px}
+.info-tbl{width:100%;border-collapse:collapse}
+td{padding:2px 6px;vertical-align:middle}
+.lbl{white-space:nowrap;width:60px;font-size:13pt}
 .sname{font-size:17pt;font-weight:bold}
 .date{text-align:right;white-space:nowrap;font-size:12pt}
 .addr{font-size:12pt}
-.hdr td{border-top:2.5px solid #000;border-bottom:1px solid #000;font-weight:bold;padding:4px 6px}
-.hdr td.c,.c{text-align:center}
-.box{width:52px;border-left:2.5px solid #000;border-right:1px solid #000}
+.region{font-size:12pt;font-weight:normal;color:#444;margin-left:4px}
+.grid-wrap{flex:1;overflow:hidden;margin-top:4px}
+.grid-tbl{width:100%;border-collapse:collapse;border:2.5px solid #000;height:100%}
+.hdr td{font-size:14pt;font-weight:bold;padding:4px 6px;border-bottom:1px solid #000;text-align:center}
+.box{width:60px;border-right:1px solid #000}
 .prod{border-right:1px solid #000}
-.qty{width:52px;border-right:1px solid #000}
-.batch{width:80px;border-right:2.5px solid #000}
-tr:not(.hdr):not(.foot) td{height:38px;font-size:20pt;border-top:1px solid #aaa;border-bottom:1px solid #aaa;border-left:none;border-right:none}
-tr:not(.hdr):not(.foot) td.box{border-left:2.5px solid #000;border-right:1px solid #000}
-tr:not(.hdr):not(.foot) td.prod{border-right:1px solid #000}
-tr:not(.hdr):not(.foot) td.qty{border-right:1px solid #000}
-tr:not(.hdr):not(.foot) td.batch{border-right:2.5px solid #000}
-.region{font-size:13pt;font-weight:normal;color:#444;margin-left:4px}
-.foot td{border-top:2.5px solid #000;border-bottom:2.5px solid #000;padding:7px 6px}
-.foot td:first-child{border-left:2.5px solid #000}
-.foot td:last-child{border-right:2.5px solid #000}
+.qty{width:60px;border-right:1px solid #000}
+.batch{width:90px}
+.has-item td{font-size:28pt;height:42px;border-bottom:1px solid #aaa}
+.empty-item td{font-size:28pt;height:42px}
+.foot-bar{display:flex;justify-content:space-between;align-items:center;border-top:2.5px solid #000;padding:8px 10px;font-size:38pt;font-weight:bold;margin-top:2px}
 </style></head><body>${pagesHtml}</body></html>`;
 
   const win = window.open('', '_blank');
@@ -1473,8 +1484,8 @@ function exportLogisticsCSV() {
     ...activeMaster.map(sm=>{
       const o=orderMap[sm.key]; if(!o) return [sm.code,sm.region,sm.fullName||sm.key,0,0,0,sm.address,sm.phone];
       const data=o.data||{};
-      const frozen=frozenProds.reduce((s,p)=>s+(data[p.id]?.order||0),0);
-      const ambient=ambientProds.reduce((s,p)=>s+(data[p.id]?.order||0),0);
+      const frozen = calcCatBoxes(data, '冷凍');
+      const ambient = calcCatBoxes(data, '常温');
       return [sm.code,sm.region,sm.fullName||sm.key,frozen||'',ambient||'',frozen+ambient||'',sm.address,sm.phone];
     }),
   ];
