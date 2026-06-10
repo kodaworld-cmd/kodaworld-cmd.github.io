@@ -650,14 +650,17 @@ async function init() {
   const { createClient } = window.supabase;
   sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // 只監聽登出事件
-  sb.auth.onAuthStateChange((event) => {
+  sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
       document.getElementById('authScreen').style.display = 'flex';
       document.getElementById('mainApp').style.display = 'none';
       document.getElementById('loginEmail').value = '';
       document.getElementById('loginPassword').value = '';
       document.getElementById('loginMsg').textContent = '';
+    }
+    if (event === 'PASSWORD_RECOVERY') {
+      // 門市人員重設密碼 → 顯示設定新密碼 overlay
+      showOrderPasswordResetOverlay();
     }
   });
 
@@ -1275,6 +1278,47 @@ function switchNav(tab) {
   document.getElementById('pageHistory').style.display = tab==='history' ? 'block' : 'none';
   document.getElementById('summaryBar').style.display = tab==='order' ? 'flex' : 'none';
   if (tab==='history') renderHistory();
+}
+
+function showOrderPasswordResetOverlay() {
+  if (document.getElementById('orderRecoveryOverlay')) return;
+  const overlay = document.createElement('div');
+  overlay.id = 'orderRecoveryOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML =
+    '<div style="background:#fff;border-radius:14px;padding:28px 24px;max-width:360px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.3)">'
+    + '<div style="text-align:center;margin-bottom:20px">'
+    + '<div style="font-size:36px;margin-bottom:8px">🔐</div>'
+    + '<div style="font-size:17px;font-weight:800;color:#1e293b">設定新密碼</div>'
+    + '<div style="font-size:13px;color:#64748b;margin-top:4px">請輸入您的新密碼</div>'
+    + '</div>'
+    + '<div style="margin-bottom:12px">'
+    + '<label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:5px">新密碼（至少 8 個字元）</label>'
+    + '<input id="oPw1" type="password" placeholder="••••••••" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">'
+    + '</div>'
+    + '<div style="margin-bottom:20px">'
+    + '<label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:5px">確認新密碼</label>'
+    + '<input id="oPw2" type="password" placeholder="••••••••" style="width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">'
+    + '</div>'
+    + '<button id="oPwBtn" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:10px;padding:13px;font-size:15px;font-weight:700;cursor:pointer">確認設定新密碼</button>'
+    + '<div id="oPwMsg" style="margin-top:10px;font-size:13px;text-align:center;color:#64748b"></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  document.getElementById('oPwBtn').onclick = async function() {
+    const pw1 = document.getElementById('oPw1').value;
+    const pw2 = document.getElementById('oPw2').value;
+    const msg = document.getElementById('oPwMsg');
+    if (pw1.length < 8) { msg.style.color='#dc2626'; msg.textContent='密碼至少 8 個字元'; return; }
+    if (pw1 !== pw2)    { msg.style.color='#dc2626'; msg.textContent='兩次密碼不一致'; return; }
+    msg.style.color='#64748b'; msg.textContent='設定中…';
+    const { error } = await sb.auth.updateUser({ password: pw1 });
+    if (error) { msg.style.color='#dc2626'; msg.textContent='設定失敗：'+error.message; return; }
+    msg.style.color='#16a34a'; msg.textContent='✅ 密碼已成功更新！';
+    setTimeout(() => {
+      overlay.remove();
+      window.location.replace(window.location.pathname);
+    }, 1500);
+  };
 }
 
 function showToast(msg) {
