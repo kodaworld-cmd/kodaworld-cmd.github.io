@@ -214,6 +214,7 @@ tr:hover td { background: #f8fafc; }
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:11px;color:var(--muted)">列印為 A4 橫式</span>
           <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 列印</button>
+          <button class="btn btn-success btn-sm" onclick="generateShippingOrders()">📄 生成出貨單</button>
         </div>
       </div>
       <div id="printHeader" class="print-title"></div>
@@ -1271,6 +1272,191 @@ function renderStoreList() {
       </td>
     </tr>`;
   }).join('');
+}
+
+// ========================
+// ========================
+// 出貨單 PDF 生成（依 生成出貨單_完整版.py 邏輯）
+// ========================
+
+// 品名對照（完整名稱 → 縮寫），以 product ID 為 key
+const SHIPPING_SHORT_NAMES = {
+  1047:'義大利麵', 251:'壽喜', 1161:'叉燒', 262:'白醬',
+  984:'馬肉', 908:'拌飯醬', 1050:'香蒜醬', 1367:'餐包',
+  1142:'哈密瓜', 735:'咖哩', 1283:'青醬', 1368:'蝦碎', 1214:'半咖哩',
+};
+
+// 混箱品項 ID（產品混箱：不單獨佔一列，需拼入其他箱）
+const MIXED_BOX_IDS     = new Set([1051, 1367]); // 牛排鹽、餐包
+const ONLY_WITH_MIXED   = new Set([1367]);        // 餐包：只能和其他混箱品拼，不拼完整箱
+const SALT_PRIORITY_IDS = [1315, 792];            // 牛排鹽優先合併對象：天婦羅蝦、大阪燒
+
+function _shipDisplayName(p) {
+  if (SHIPPING_SHORT_NAMES[p.id]) return SHIPPING_SHORT_NAMES[p.id];
+  // 去除括號內重量規格
+  return p.name
+    .replace(/[（(][^）)]*[克g][/／][包袋][）)]/g, '')
+    .replace(/[（(][^）)]*[）)]/g, '')
+    .replace(/\s*\d+[g克][/／][包袋]\s*/g, '')
+    .replace(/\s*\d+[/／]包\s*/g, '')
+    .trim();
+}
+
+function _buildShipRows(order) {
+  const orderedProds = PRODUCTS.filter(p => (order.data?.[p.id]?.order || 0) > 0);
+  const reg = []; // {name, qty, type:'r'|'c'|'m'}
+  const mix = []; // {id, name, qty}
+
+  orderedProds.forEach(p => {
+    const qty = order.data[p.id].order;
+    const dn  = _shipDisplayName(p);
+    if (MIXED_BOX_IDS.has(p.id)) mix.push({ id: p.id, name: dn, qty });
+    else reg.push({ name: dn, qty, type: 'r' });
+  });
+
+  // 拼箱邏輯
+  if (mix.length === 1) {
+    const { id: mId, name: mn, qty: mq } = mix[0];
+    if (ONLY_WITH_MIXED.has(mId)) {
+      // 餐包：直接附加，不拼完整箱
+      reg.push({ name: `${mn}×${mq}`, qty: '', type: 'm' });
+    } else if (reg.length > 0) {
+      // 找合併對象
+      let targetIdx = reg.length - 1; // 預設：最後一個完整箱
+      if (mId === 1051) { // 牛排鹽優先天婦羅蝦/大阪燒
+        for (const pid of SALT_PRIORITY_IDS) {
+          const idx = reg.findIndex(item => {
+            const p = PRODUCTS.find(x => x.id === pid);
+            return p && _shipDisplayName(p) === item.name;
+          });
+          if (idx !== -1) { targetIdx = idx; break; }
+        }
+      }
+      const t = reg[targetIdx];
+      reg[targetIdx] = { name: `${t.name}1/${mn}×${mq}`, qty: '', type: 'c' };
+      if (typeof t.qty === 'number' && t.qty > 1) {
+        reg.splice(targetIdx + 1, 0, { name: t.name, qty: t.qty - 1, type: 'r' });
+      }
+    } else {
+      reg.push({ name: `${mn}×${mq}`, qty: '', type: 'm' });
+    }
+  } else if (mix.length > 1) {
+    const combined = mix.map(m => `${m.name}×${m.qty}`).join(' / ');
+    reg.push({ name: combined, qty: '', type: 'm' });
+  }
+
+  // 產出 19 列（R5~R23，固定行數）
+  const rows = [];
+  for (let i = 0; i < 19; i++) {
+    if (i < reg.length) {
+      const item = reg[i];
+      const display = item.type === 'r' ? `${item.name}${item.qty}` : item.name;
+      rows.push(display);
+    } else {
+      rows.push('');
+    }
+  }
+  return rows;
+}
+
+function generateShippingOrders() {
+  if (!allOrders.length) { showToast('本週尚無訂單'); return; }
+
+  const wf = document.getElementById('weekFilter');
+  const weekKey = wf.value;
+
+  // 出貨週次的星期四（週一 + 3 天，對應 weekFilter 顯示的出貨日）
+  const mon    = new Date(weekKey + 'T00:00:00');
+  const thu    = new Date(mon); thu.setDate(mon.getDate() + 3);
+  const dateStr = `${thu.getMonth()+1}/${thu.getDate()}`;
+
+  const storeMaster  = getEffectiveStoreMaster();
+  const sortedStores = _sortStores(storeMaster).filter(s => allOrders.find(o => o.store_key === s.key));
+
+  const pages = [];
+  sortedStores.forEach(store => {
+    const order = allOrders.find(o => o.store_key === store.key);
+    if (!order) return;
+    const rows = _buildShipRows(order);
+    if (rows.every(r => !r)) return; // 全空略過
+    pages.push({ store, rows, dateStr });
+  });
+
+  if (!pages.length) { showToast('沒有可生成的門市訂單'); return; }
+
+  // 組 HTML
+  const rowsHtml = (rows) => rows.map(name => `
+    <tr>
+      <td class="c box"></td>
+      <td class="prod">${name ? name.replace(/&/g,'&amp;').replace(/</g,'&lt;') : ''}</td>
+      <td class="c qty"></td>
+      <td class="c batch"></td>
+    </tr>`).join('');
+
+  const pagesHtml = pages.map(({ store, rows, dateStr }) => `
+    <div class="page">
+      <div class="title">JOYFULL中央廚房出貨單</div>
+      <table>
+        <tr>
+          <td class="lbl">TO：</td>
+          <td class="sname" colspan="2">${store.fullName || store.key}</td>
+          <td class="date">日期：${dateStr}</td>
+        </tr>
+        <tr>
+          <td class="lbl">地址：</td>
+          <td colspan="3" class="addr">${store.address || '（待補）'}</td>
+        </tr>
+        <tr>
+          <td class="lbl">電話：</td>
+          <td colspan="3">${store.phone || '（待補）'}</td>
+        </tr>
+        <tr class="hdr">
+          <td class="c">箱碼</td><td>產品名稱</td><td class="c">數量</td><td class="c">批號</td>
+        </tr>
+        ${rowsHtml(rows)}
+        <tr class="foot">
+          <td colspan="2">共計箱數：</td>
+          <td colspan="2">司機簽收：</td>
+        </tr>
+      </table>
+    </div>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>JOYFULL出貨單</title>
+<style>
+@page{size:A4 portrait;margin:10mm}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt}
+.page{width:100%;page-break-after:always}
+.page:last-child{page-break-after:auto}
+.title{font-size:22pt;font-weight:bold;text-align:center;border:2.5px solid #000;padding:6px 0;margin-bottom:2px}
+table{width:100%;border-collapse:collapse}
+td{padding:3px 6px;font-size:13pt;vertical-align:middle}
+.lbl{white-space:nowrap;width:52px}
+.sname{font-size:17pt;font-weight:bold}
+.date{text-align:right;white-space:nowrap;font-size:12pt}
+.addr{font-size:12pt}
+.hdr td{border-top:2.5px solid #000;border-bottom:1px solid #000;font-weight:bold;padding:4px 6px}
+.hdr td.c,.c{text-align:center}
+.box{width:52px;border-left:2.5px solid #000;border-right:1px solid #000}
+.prod{border-right:1px solid #000}
+.qty{width:52px;border-right:1px solid #000}
+.batch{width:80px;border-right:2.5px solid #000}
+tr:not(.hdr):not(.foot) td{height:25px;border-left:none;border-right:none}
+tr:not(.hdr):not(.foot) td.box{border-left:2.5px solid #000;border-right:1px solid #000}
+tr:not(.hdr):not(.foot) td.prod{border-right:1px solid #000}
+tr:not(.hdr):not(.foot) td.qty{border-right:1px solid #000}
+tr:not(.hdr):not(.foot) td.batch{border-right:2.5px solid #000}
+.foot td{border-top:2.5px solid #000;border-bottom:2.5px solid #000;padding:7px 6px}
+.foot td:first-child{border-left:2.5px solid #000}
+.foot td:last-child{border-right:2.5px solid #000}
+</style></head><body>${pagesHtml}</body></html>`;
+
+  const win = window.open('', '_blank');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 600);
+  showToast(`✅ 已開啟 ${pages.length} 家門市出貨單`);
 }
 
 // ========================
