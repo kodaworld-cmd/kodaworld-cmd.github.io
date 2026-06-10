@@ -907,13 +907,12 @@ function renderDetailTable() {
 
   const rows=submitted.map(storeKey => {
     const o=orderMap[storeKey]; const oLast=lastMap[storeKey]; const data=o?.data||{};
-    let rowTotal=0;
     const cells=PRODUCTS.map(p=>{
       const v=p.id===BREAD_ID?(oLast?.data?.[BREAD_ID]?.order||0):(data[p.id]?.order||0);
-      rowTotal+=v;
       const extraStyle=p.id===BREAD_ID&&v>0?' style="color:var(--special);font-weight:800"':'';
       return `<td class="qc ${v>0?'on':'off'}"${extraStyle}>${v>0?v:'—'}</td>`;
     });
+    const rowBoxes = o ? calcOrderBoxes(data) : 0;
 
     // 判斷是否截止後修改
     const submittedAt = o?.submitted_at ? new Date(o.submitted_at) : null;
@@ -931,18 +930,41 @@ function renderDetailTable() {
     const editBtn = orderId ? `<button onclick="editOrder('${storeKey}','${orderId}')" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;margin-right:3px">✏️</button>` : '';
     const delBtn  = orderId ? `<button onclick="deleteOrder('${storeKey}','${orderId}')" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer">🗑</button>` : '';
     const rowStyle = isLateEdit ? ' style="background:#fffbeb"' : '';
-    return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowTotal}</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
+    return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowBoxes} 箱</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
   });
 
   const colTotals=PRODUCTS.map(p=>p.id===BREAD_ID
     ?lastWeekOrders.reduce((s,o)=>s+(o.data?.[BREAD_ID]?.order||0),0)
     :allOrders.reduce((s,o)=>s+(o.data?.[p.id]?.order||0),0));
-  const grand=colTotals.reduce((s,v)=>s+v,0);
+  const grandBoxes = allOrders.reduce((s,o)=>s+calcOrderBoxes(o.data||{}),0);
   const totRow=`<tr class="total-row"><td>合計</td>${colTotals.map((t,i)=>{
     const isBread=PRODUCTS[i].id===BREAD_ID;
     return `<td class="qc ${t>0?'on':'off'}"${isBread&&t>0?' style="color:var(--special)"':''}>${t>0?`<strong>${t}</strong>`:'—'}</td>`;
-  }).join('')}<td class="grand">${grand}</td><td></td><td></td></tr>`;
+  }).join('')}<td class="grand">${grandBoxes} 箱</td><td></td><td></td></tr>`;
   document.getElementById('detailBody').innerHTML=rows.join('')+totRow;
+}
+
+// ========================
+// 箱數估算（對應前台 calcEstimatedBoxes 邏輯）
+// ========================
+const LOOSE_BOX_ADMIN_DEFAULT = { 1051:0, 1368:10, 1367:6, 1142:6, 1283:100, 1050:200 };
+
+function calcOrderBoxes(data) {
+  let regularBoxes = 0;
+  let looseFraction = 0;
+  PRODUCTS.forEach(p => {
+    if (p.special) return; // 代訂餐包不計入本週箱數
+    const qty = (data[p.id]?.order) || 0;
+    if (!qty) return;
+    if (LOOSE_BOX_ADMIN_DEFAULT.hasOwnProperty(p.id)) {
+      const perBox = LOOSE_BOX_ADMIN_DEFAULT[p.id];
+      if (perBox > 0) looseFraction += qty / perBox;
+      // perBox===0（牛排鹽）= 散裝塞入其他箱，不另計
+    } else if (p.unit === '箱') {
+      regularBoxes += qty;
+    }
+  });
+  return regularBoxes + (looseFraction > 0 ? Math.ceil(looseFraction) : 0);
 }
 
 // ========================
@@ -1279,83 +1301,23 @@ function renderStoreList() {
 // 出貨單 PDF 生成（依 生成出貨單_完整版.py 邏輯）
 // ========================
 
-// 品名對照（完整名稱 → 縮寫），以 product ID 為 key
-const SHIPPING_SHORT_NAMES = {
-  1047:'義大利麵', 251:'壽喜', 1161:'叉燒', 262:'白醬',
-  984:'馬肉', 908:'拌飯醬', 1050:'香蒜醬', 1367:'餐包',
-  1142:'哈密瓜', 735:'咖哩', 1283:'青醬', 1368:'蝦碎', 1214:'半咖哩',
-};
-
-// 混箱品項 ID（產品混箱：不單獨佔一列，需拼入其他箱）
-const MIXED_BOX_IDS     = new Set([1051, 1367]); // 牛排鹽、餐包
-const ONLY_WITH_MIXED   = new Set([1367]);        // 餐包：只能和其他混箱品拼，不拼完整箱
-const SALT_PRIORITY_IDS = [1315, 792];            // 牛排鹽優先合併對象：天婦羅蝦、大阪燒
-
-function _shipDisplayName(p) {
-  if (SHIPPING_SHORT_NAMES[p.id]) return SHIPPING_SHORT_NAMES[p.id];
-  // 去除括號內重量規格
-  return p.name
-    .replace(/[（(][^）)]*[克g][/／][包袋][）)]/g, '')
-    .replace(/[（(][^）)]*[）)]/g, '')
-    .replace(/\s*\d+[g克][/／][包袋]\s*/g, '')
-    .replace(/\s*\d+[/／]包\s*/g, '')
-    .trim();
-}
-
 function _buildShipRows(order) {
   const orderedProds = PRODUCTS.filter(p => (order.data?.[p.id]?.order || 0) > 0);
-  const reg = []; // {name, qty, type:'r'|'c'|'m'}
-  const mix = []; // {id, name, qty}
+  const boxItems   = []; // unit==='箱'：完整箱，各自一列
+  const looseItems = []; // unit!=='箱'（包/罐等）：散裝，全部合併一列
 
   orderedProds.forEach(p => {
     const qty = order.data[p.id].order;
-    const dn  = _shipDisplayName(p);
-    if (MIXED_BOX_IDS.has(p.id)) mix.push({ id: p.id, name: dn, qty });
-    else reg.push({ name: dn, qty, type: 'r' });
+    const sn  = p.short || p.name; // 優先使用品項管理的縮寫
+    if (p.unit === '箱') boxItems.push(`${sn}${qty}`);
+    else looseItems.push(`${sn}×${qty}`);
   });
 
-  // 拼箱邏輯
-  if (mix.length === 1) {
-    const { id: mId, name: mn, qty: mq } = mix[0];
-    if (ONLY_WITH_MIXED.has(mId)) {
-      // 餐包：直接附加，不拼完整箱
-      reg.push({ name: `${mn}×${mq}`, qty: '', type: 'm' });
-    } else if (reg.length > 0) {
-      // 找合併對象
-      let targetIdx = reg.length - 1; // 預設：最後一個完整箱
-      if (mId === 1051) { // 牛排鹽優先天婦羅蝦/大阪燒
-        for (const pid of SALT_PRIORITY_IDS) {
-          const idx = reg.findIndex(item => {
-            const p = PRODUCTS.find(x => x.id === pid);
-            return p && _shipDisplayName(p) === item.name;
-          });
-          if (idx !== -1) { targetIdx = idx; break; }
-        }
-      }
-      const t = reg[targetIdx];
-      reg[targetIdx] = { name: `${t.name}1/${mn}×${mq}`, qty: '', type: 'c' };
-      if (typeof t.qty === 'number' && t.qty > 1) {
-        reg.splice(targetIdx + 1, 0, { name: t.name, qty: t.qty - 1, type: 'r' });
-      }
-    } else {
-      reg.push({ name: `${mn}×${mq}`, qty: '', type: 'm' });
-    }
-  } else if (mix.length > 1) {
-    const combined = mix.map(m => `${m.name}×${m.qty}`).join(' / ');
-    reg.push({ name: combined, qty: '', type: 'm' });
-  }
+  const rows = [...boxItems];
+  if (looseItems.length > 0) rows.push(looseItems.join('/'));
 
-  // 產出 19 列（R5~R23，固定行數）
-  const rows = [];
-  for (let i = 0; i < 19; i++) {
-    if (i < reg.length) {
-      const item = reg[i];
-      const display = item.type === 'r' ? `${item.name}${item.qty}` : item.name;
-      rows.push(display);
-    } else {
-      rows.push('');
-    }
-  }
+  // 補空列到最少 19 列
+  while (rows.length < 19) rows.push('');
   return rows;
 }
 
@@ -1399,7 +1361,7 @@ function generateShippingOrders() {
       <table>
         <tr>
           <td class="lbl">TO：</td>
-          <td class="sname" colspan="2">${store.fullName || store.key}</td>
+          <td class="sname" colspan="2">${store.fullName || store.key}<span class="region">（${store.region}）</span></td>
           <td class="date">日期：${dateStr}</td>
         </tr>
         <tr>
@@ -1441,11 +1403,12 @@ td{padding:3px 6px;font-size:13pt;vertical-align:middle}
 .prod{border-right:1px solid #000}
 .qty{width:52px;border-right:1px solid #000}
 .batch{width:80px;border-right:2.5px solid #000}
-tr:not(.hdr):not(.foot) td{height:25px;border-left:none;border-right:none}
+tr:not(.hdr):not(.foot) td{height:25px;border-top:1px solid #aaa;border-bottom:1px solid #aaa;border-left:none;border-right:none}
 tr:not(.hdr):not(.foot) td.box{border-left:2.5px solid #000;border-right:1px solid #000}
 tr:not(.hdr):not(.foot) td.prod{border-right:1px solid #000}
 tr:not(.hdr):not(.foot) td.qty{border-right:1px solid #000}
 tr:not(.hdr):not(.foot) td.batch{border-right:2.5px solid #000}
+.region{font-size:13pt;font-weight:normal;color:#444;margin-left:4px}
 .foot td{border-top:2.5px solid #000;border-bottom:2.5px solid #000;padding:7px 6px}
 .foot td:first-child{border-left:2.5px solid #000}
 .foot td:last-child{border-right:2.5px solid #000}
