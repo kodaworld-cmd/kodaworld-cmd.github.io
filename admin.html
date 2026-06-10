@@ -1732,7 +1732,11 @@ async function loadUserList() {
     if (!accessMap[a.user_id]) accessMap[a.user_id] = [];
     accessMap[a.user_id].push(a.store_key);
   });
-  const effectiveStores = [...ALL_STORE_KEYS, ...cachedCustomStores.map(s=>s.key)];
+  // 只列啟用中門市（停用門市不出現在指派選單）
+  const effectiveStores = [
+    ...ALL_STORE_KEYS.filter(k => !cachedDisabledStores.includes(k)),
+    ...cachedCustomStores.filter(s => s.is_active !== false && !cachedDisabledStores.includes(s.key)).map(s => s.key)
+  ];
   const isSuperAdmin = currentAdminRole === 'admin';
   body.innerHTML = profiles.map(p => {
     const stores = accessMap[p.id] || [];
