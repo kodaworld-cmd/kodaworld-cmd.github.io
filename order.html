@@ -225,8 +225,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div class="nav-tabs">
   <div class="nav-tab active" id="navOrder" onclick="switchNav('order')">本週訂貨</div>
   <div class="nav-tab" id="navHistory" onclick="switchNav('history')">訂貨紀錄</div>
-  <div class="nav-tab" id="navIssue" onclick="switchNav('issue')">異常通報<span id="issueUnreadBadge" class="nav-badge"></span></div>
-  <div class="nav-tab" style="margin-left:auto;padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.6);cursor:pointer" onclick="doLogout()">登出</div>
+  <div class="nav-tab" id="navIssue" onclick="switchNav('issue')"><span id="navIssueLabel">異常通報</span><span id="issueUnreadBadge" class="nav-badge"></span></div>
+  <div class="nav-tab" id="navLogoutBtn" style="margin-left:auto;padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.6);cursor:pointer" onclick="doLogout()">登出</div>
 </div>
 
 
@@ -298,7 +298,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <div id="pageIssue" style="display:none">
   <div class="issue-add-bar">
-    <button class="issue-add-btn" onclick="openIssueForm()">📋 新增異常通報</button>
+    <button class="issue-add-btn" id="issueAddBtnEl" onclick="openIssueForm()">📋 新增異常通報</button>
   </div>
   <div class="history-section" id="issueListContent"></div>
 </div>
@@ -307,44 +307,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div id="issueFormOverlay" class="modal-overlay" style="display:none">
   <div class="modal-box">
     <div class="modal-header">
-      <div class="modal-title">📋 異常通報</div>
+      <div class="modal-title" id="issueFormTitleEl">📋 異常通報</div>
       <div class="modal-close" onclick="closeIssueForm()">✕</div>
     </div>
     <div class="modal-body">
       <div class="field">
-        <label>問題品項 <span style="color:#ef4444">*</span></label>
+        <label id="issueLabelProductEl">問題品項 <span style="color:#ef4444">*</span></label>
         <div class="select-wrap">
           <select id="issueProduct" onchange="onIssueProductChange()"></select>
         </div>
       </div>
       <div class="field" id="issueProductOtherWrap" style="display:none">
-        <label>品項名稱</label>
+        <label id="issueLabelProductOtherEl">品項名稱</label>
         <input id="issueProductOther" type="text" placeholder="請輸入品項名稱">
       </div>
       <div class="field">
-        <label>問題類型 <span style="color:#ef4444">*</span></label>
+        <label id="issueLabelTypeEl">問題類型 <span style="color:#ef4444">*</span></label>
         <div class="select-wrap">
           <select id="issueType">
-            <option value="">請選擇…</option>
-            <option value="異物">異物</option>
-            <option value="品質">品質（變質／口感／發霉等）</option>
-            <option value="保存期限">保存期限</option>
-            <option value="數量短缺">數量短缺</option>
-            <option value="包裝">包裝（破包／封口不良）</option>
-            <option value="其他">其他</option>
+            <option value="" id="issueTypeOptDefault">請選擇…</option>
+            <option value="異物" id="issueTypeOpt1">異物</option>
+            <option value="品質" id="issueTypeOpt2">品質（變質／口感／發霉等）</option>
+            <option value="保存期限" id="issueTypeOpt3">保存期限</option>
+            <option value="數量短缺" id="issueTypeOpt4">數量短缺</option>
+            <option value="包裝" id="issueTypeOpt5">包裝（破包／封口不良）</option>
+            <option value="其他" id="issueTypeOpt6">其他</option>
           </select>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="field">
-          <label>發生問題數量</label>
+          <label id="issueLabelQtyEl">發生問題數量</label>
           <div style="display:flex;gap:6px">
             <input id="issueQty" type="number" min="0" step="1" inputmode="decimal" style="flex:1">
             <input id="issueQtyUnit" type="text" style="width:60px" placeholder="單位">
           </div>
         </div>
         <div class="field">
-          <label>同批號剩餘庫存</label>
+          <label id="issueLabelRemainEl">同批號剩餘庫存</label>
           <div style="display:flex;gap:6px">
             <input id="issueRemainQty" type="number" min="0" step="1" inputmode="decimal" style="flex:1">
             <input id="issueRemainUnit" type="text" style="width:60px" placeholder="單位">
@@ -352,29 +352,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         </div>
       </div>
       <div class="field">
-        <label>生產日期 <span style="color:#ef4444">*</span></label>
-        <input id="issueProdDate" type="date" style="width:100%">
+        <label id="issueLabelProdDateEl">生產日期 <span style="color:#ef4444">*</span></label>
+        <input id="issueProdDate" type="date" style="width:100%" onchange="validateIssueProdDate()" oninput="validateIssueProdDate()">
+        <div id="issueProdDateErr" style="display:none;color:#ef4444;font-size:12px;margin-top:4px;font-weight:700">⚠️ 生產日期不可晚於今天，請重新選擇</div>
       </div>
       <div class="field">
-        <label>批號 <span style="color:#ef4444">*</span></label>
+        <label id="issueLabelBatchEl">批號 <span style="color:#ef4444">*</span></label>
         <input id="issueBatchNo" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="僅數字，例：5" style="width:100%">
       </div>
       <div class="field">
-        <label>問題描述 <span style="color:#ef4444">*</span></label>
+        <label id="issueLabelDescEl">問題描述 <span style="color:#ef4444">*</span></label>
         <textarea id="issueDesc" rows="3" placeholder="請詳細描述問題情況"></textarea>
       </div>
       <div class="field">
-        <label>上傳照片（最多 6 張）</label>
+        <label id="issueLabelPhotoEl">上傳照片（最多 6 張）</label>
         <input id="issuePhotoInput" type="file" accept="image/*" multiple onchange="onIssuePhotoSelect(event)">
         <div id="issuePhotoPreview" class="photo-preview"></div>
       </div>
       <div class="field">
-        <label>提報人姓名 <span style="color:#ef4444">*</span></label>
+        <label id="issueLabelReporterEl">提報人姓名 <span style="color:#ef4444">*</span></label>
         <input id="issueReporterName" type="text" placeholder="請輸入姓名">
       </div>
     </div>
     <div class="modal-footer">
-      <button class="modal-btn-secondary" onclick="closeIssueForm()">取消</button>
+      <button class="modal-btn-secondary" id="issueCancelBtnEl" onclick="closeIssueForm()">取消</button>
       <button class="modal-btn-primary" id="issueSubmitBtn" onclick="submitIssue()">送出通報</button>
     </div>
   </div>
@@ -384,7 +385,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div id="issueDetailOverlay" class="modal-overlay" style="display:none">
   <div class="modal-box">
     <div class="modal-header">
-      <div class="modal-title">案件詳情</div>
+      <div class="modal-title" id="issueDetailTitleEl">案件詳情</div>
       <div class="modal-close" onclick="closeIssueDetail()">✕</div>
     </div>
     <div class="modal-body" id="issueDetailBody"></div>
@@ -529,6 +530,33 @@ const T = {
     waitingStoreBtn:'登出',
     minBoxWarn:'⚠️ 預估 {boxes} 箱，未達最低出貨量 {min} 箱，運費仍以 {min} 箱計算',
     breadNextWeek:'　＋下週餐包 {qty} 包',
+    // 異常通報
+    navIssue:'異常通報', btnLogout:'登出', logoutConfirm:'確定要登出嗎？',
+    issueAddBtn:'📋 新增異常通報',
+    issueFormTitle:'📋 異常通報',
+    issueLabelProduct:'問題品項', issueOptSelectProduct:'請選擇品項…', issueOptOther:'其他（自行輸入）',
+    issueLabelProductOther:'品項名稱', issuePhProductOther:'請輸入品項名稱',
+    issueLabelType:'問題類型', issueOptSelectType:'請選擇…',
+    issueLabelQty:'發生問題數量', issueLabelRemain:'同批號剩餘庫存', issuePhUnit:'單位',
+    issueLabelProdDate:'生產日期', issueProdDateErr:'⚠️ 生產日期不可晚於今天，請重新選擇',
+    issueLabelBatch:'批號', issuePhBatch:'僅數字，例：5',
+    issueLabelDesc:'問題描述', issuePhDesc:'請詳細描述問題情況',
+    issueLabelPhoto:'上傳照片（最多 6 張）',
+    issueLabelReporter:'提報人姓名',
+    issueBtnCancel:'取消', issueBtnSubmit:'送出通報', issueBtnSubmitting:'送出中…',
+    issueDetailTitle:'案件詳情',
+    issueDetailCaseNo:'案件編號', issueDetailTime:'通報時間', issueDetailItem:'品項', issueDetailType:'問題類型',
+    issueDetailQty:'問題數量', issueDetailRemain:'同批剩餘庫存', issueDetailProdDate:'生產日期', issueDetailBatch:'批號',
+    issueDetailReporter:'提報人', issueDetailDescTitle:'問題描述', issueDetailPhotoTitle:'照片',
+    issueDetailFeedbackTitle:'央廚處理回饋', issueDetailResp:'責任歸屬', issueDetailResolution:'處理方式',
+    issueDetailNoFeedback:'處理中，尚未填寫處理結果',
+    issueListLoading:'載入中…', issueListLoadError:'載入失敗：', issueListEmpty:'📭 尚無異常通報紀錄',
+    toastSelectProduct:'請選擇或輸入問題品項', toastSelectType:'請選擇問題類型',
+    toastFillProdDate:'請填寫生產日期', toastProdDateFuture:'⚠️ 生產日期不可晚於今天',
+    toastFillBatch:'請填寫批號', toastBatchNumeric:'批號僅能輸入數字',
+    toastFillDesc:'請填寫問題描述', toastFillReporter:'請填寫提報人姓名',
+    toastIssueSubmitted:'✅ 通報已送出', toastIssueSubmitFail:'送出失敗：',
+    toastMaxPhotos:'最多上傳 6 張照片',
   },
   ja: {
     title:'手作発注システム', deadlineNormal:'毎週月曜 10:00 締め切り', deadlineToday:'⏰ 本日 10:00 締め切り！', deadlineUrgent:'⚠️ 締め切り間近！', deadlinePast:'❌ 今週締め切り済み',
@@ -562,6 +590,33 @@ const T = {
     waitingStoreBtn:'ログアウト',
     minBoxWarn:'⚠️ 推定 {boxes} 箱。最低出荷数 {min} 箱に未達。運賃は {min} 箱で計算されます',
     breadNextWeek:'　＋来週パン {qty} 袋',
+    // 異常通報
+    navIssue:'異常報告', btnLogout:'ログアウト', logoutConfirm:'ログアウトしますか？',
+    issueAddBtn:'📋 異常報告を作成',
+    issueFormTitle:'📋 異常報告',
+    issueLabelProduct:'対象商品', issueOptSelectProduct:'商品を選択…', issueOptOther:'その他（自由入力）',
+    issueLabelProductOther:'商品名', issuePhProductOther:'商品名を入力',
+    issueLabelType:'異常の種類', issueOptSelectType:'選択してください…',
+    issueLabelQty:'異常発生数量', issueLabelRemain:'同ロット残数量', issuePhUnit:'単位',
+    issueLabelProdDate:'製造日', issueProdDateErr:'⚠️ 製造日は本日以前の日付を選択してください',
+    issueLabelBatch:'ロット番号', issuePhBatch:'数字のみ、例：5',
+    issueLabelDesc:'異常内容の詳細', issuePhDesc:'異常の状況を詳しくご記入ください',
+    issueLabelPhoto:'写真をアップロード（最大6枚）',
+    issueLabelReporter:'報告者氏名',
+    issueBtnCancel:'キャンセル', issueBtnSubmit:'報告を送信', issueBtnSubmitting:'送信中…',
+    issueDetailTitle:'案件詳細',
+    issueDetailCaseNo:'案件番号', issueDetailTime:'報告日時', issueDetailItem:'商品', issueDetailType:'異常の種類',
+    issueDetailQty:'異常発生数量', issueDetailRemain:'同ロット残数量', issueDetailProdDate:'製造日', issueDetailBatch:'ロット番号',
+    issueDetailReporter:'報告者', issueDetailDescTitle:'異常内容', issueDetailPhotoTitle:'写真',
+    issueDetailFeedbackTitle:'本部対応記録', issueDetailResp:'責任所在', issueDetailResolution:'対応方法',
+    issueDetailNoFeedback:'対応中、まだ結果が入力されていません',
+    issueListLoading:'読み込み中…', issueListLoadError:'読み込み失敗：', issueListEmpty:'📭 異常報告の記録はありません',
+    toastSelectProduct:'商品を選択または入力してください', toastSelectType:'異常の種類を選択してください',
+    toastFillProdDate:'製造日を入力してください', toastProdDateFuture:'⚠️ 製造日は本日以前にしてください',
+    toastFillBatch:'ロット番号を入力してください', toastBatchNumeric:'ロット番号は数字のみ入力できます',
+    toastFillDesc:'異常内容を入力してください', toastFillReporter:'報告者名を入力してください',
+    toastIssueSubmitted:'✅ 報告を送信しました', toastIssueSubmitFail:'送信失敗：',
+    toastMaxPhotos:'写真は最大6枚までです',
   }
 };
 
@@ -586,6 +641,49 @@ function applyLang() {
   document.getElementById('deadlineBadge').textContent = l.deadlineNormal;
   document.getElementById('navOrder').textContent = l.navOrder;
   document.getElementById('navHistory').textContent = l.navHistory;
+  document.getElementById('navIssueLabel').textContent = l.navIssue;
+  document.getElementById('navLogoutBtn').textContent = l.btnLogout;
+  // 異常通報表單 / 詳情
+  const issueAddBtnEl = document.getElementById('issueAddBtnEl');
+  if (issueAddBtnEl) issueAddBtnEl.textContent = l.issueAddBtn;
+  const star = ' <span style="color:#ef4444">*</span>';
+  const setLbl = (id, text, required) => { const el = document.getElementById(id); if (el) el.innerHTML = text + (required ? star : ''); };
+  setLbl('issueFormTitleEl', l.issueFormTitle);
+  setLbl('issueLabelProductEl', l.issueLabelProduct, true);
+  setLbl('issueLabelProductOtherEl', l.issueLabelProductOther);
+  const issueProductOtherEl = document.getElementById('issueProductOther');
+  if (issueProductOtherEl) issueProductOtherEl.placeholder = l.issuePhProductOther;
+  setLbl('issueLabelTypeEl', l.issueLabelType, true);
+  const issueTypeOptDefault = document.getElementById('issueTypeOptDefault');
+  if (issueTypeOptDefault) issueTypeOptDefault.textContent = l.issueOptSelectType;
+  [['issueTypeOpt1','異物'],['issueTypeOpt2','品質'],['issueTypeOpt3','保存期限'],['issueTypeOpt4','數量短缺'],['issueTypeOpt5','包裝'],['issueTypeOpt6','其他']].forEach(([id,key]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = ISSUE_TYPE_OPTION_LABELS[currentLang][key];
+  });
+  setLbl('issueLabelQtyEl', l.issueLabelQty);
+  setLbl('issueLabelRemainEl', l.issueLabelRemain);
+  const issueQtyUnitEl = document.getElementById('issueQtyUnit');
+  if (issueQtyUnitEl) issueQtyUnitEl.placeholder = l.issuePhUnit;
+  const issueRemainUnitEl = document.getElementById('issueRemainUnit');
+  if (issueRemainUnitEl) issueRemainUnitEl.placeholder = l.issuePhUnit;
+  setLbl('issueLabelProdDateEl', l.issueLabelProdDate, true);
+  const issueProdDateErrEl = document.getElementById('issueProdDateErr');
+  if (issueProdDateErrEl) issueProdDateErrEl.textContent = l.issueProdDateErr;
+  setLbl('issueLabelBatchEl', l.issueLabelBatch, true);
+  const issueBatchNoEl = document.getElementById('issueBatchNo');
+  if (issueBatchNoEl) issueBatchNoEl.placeholder = l.issuePhBatch;
+  setLbl('issueLabelDescEl', l.issueLabelDesc, true);
+  const issueDescEl = document.getElementById('issueDesc');
+  if (issueDescEl) issueDescEl.placeholder = l.issuePhDesc;
+  setLbl('issueLabelPhotoEl', l.issueLabelPhoto);
+  setLbl('issueLabelReporterEl', l.issueLabelReporter, true);
+  const issueCancelBtnEl = document.getElementById('issueCancelBtnEl');
+  if (issueCancelBtnEl) issueCancelBtnEl.textContent = l.issueBtnCancel;
+  const issueSubmitBtnEl = document.getElementById('issueSubmitBtn');
+  if (issueSubmitBtnEl && !issueSubmitBtnEl.disabled) issueSubmitBtnEl.textContent = l.issueBtnSubmit;
+  const issueDetailTitleEl = document.getElementById('issueDetailTitleEl');
+  if (issueDetailTitleEl) issueDetailTitleEl.textContent = l.issueDetailTitle;
+  if (document.getElementById('pageIssue').style.display !== 'none') renderIssueList();
   document.getElementById('labelStore').innerHTML = l.labelStore;
   document.getElementById('labelName').innerHTML = `${l.labelName} <span style="color:#ef4444">*</span>`;
   document.getElementById('submitterName').placeholder = l.placeholderName;
@@ -715,7 +813,7 @@ async function doRegister() {
 }
 
 async function doLogout() {
-  if (!confirm('確定要登出嗎？')) return;
+  if (!confirm(t('logoutConfirm'))) return;
   await sb.auth.signOut();
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('mainApp').style.display = 'none';
@@ -1509,6 +1607,25 @@ function showToast(msg) {
 let issueListCache = [];
 let issuePhotoBlobs = []; // [{blob, url}]
 
+// 中→日 顯示對照（資料庫值維持中文，僅顯示時依語言轉換；需與 admin.html 對照表一致）
+const ISSUE_TYPE_JA = {'異物':'異物混入','品質':'品質（変質・食感・カビ等）','保存期限':'賞味期限','數量短缺':'数量不足','包裝':'梱包（破損・封緘不良）','其他':'その他'};
+const ISSUE_STATUS_JA = {'待處理':'未対応','處理中':'対応中','已結案':'完了'};
+const ISSUE_RESP_JA = {'原料供應商':'原材料サプライヤー','央廚-生產':'セントラルキッチン-製造','央廚-包裝':'セントラルキッチン-梱包','物流配送':'配送','門市操作':'店舗オペレーション','其他':'その他'};
+const ISSUE_RESO_JA = {'原門市報廢':'店舗で廃棄','退回央廚':'セントラルキッチンへ返品','換貨補寄':'交換・再送','其他':'その他'};
+
+// 異常通報表單「問題類型」下拉選項顯示文字（含補充說明，與資料庫值不同）
+const ISSUE_TYPE_OPTION_LABELS = {
+  zh: {'異物':'異物', '品質':'品質（變質／口感／發霉等）', '保存期限':'保存期限', '數量短缺':'數量短缺', '包裝':'包裝（破包／封口不良）', '其他':'其他'},
+  ja: {'異物':'異物混入', '品質':'品質（変質・食感・カビ等）', '保存期限':'賞味期限', '數量短缺':'数量不足', '包裝':'梱包（破損・封緘不良）', '其他':'その他'}
+};
+
+function issLabel(zh, map) { return currentLang === 'ja' ? (map[zh] || zh) : zh; }
+
+// 品項名稱依語言顯示（沿用現有 PRODUCT_NAMES_JA 對照表）
+function issueProductDisplayName(productId, fallbackName) {
+  return (currentLang === 'ja' && productId != null && PRODUCT_NAMES_JA[productId]) ? PRODUCT_NAMES_JA[productId] : fallbackName;
+}
+
 // 異常案件「有更新」提醒（裝置端記憶，比對央廚最後處理時間 handled_at）
 function getIssueSeenMap() {
   try { return JSON.parse(localStorage.getItem('issueSeenMap') || '{}'); } catch(e) { return {}; }
@@ -1534,11 +1651,11 @@ async function checkIssueUpdates() {
 }
 
 function openIssueForm() {
-  if (!currentStore) { showToast('請先選擇門市'); return; }
+  if (!currentStore) { showToast(t('toastStore')); return; }
   const sel = document.getElementById('issueProduct');
-  sel.innerHTML = '<option value="">請選擇品項…</option>'
-    + PRODUCTS.map(p => `<option value="${p.id}">${p.name}</option>`).join('')
-    + '<option value="other">其他（自行輸入）</option>';
+  sel.innerHTML = `<option value="">${t('issueOptSelectProduct')}</option>`
+    + PRODUCTS.map(p => `<option value="${p.id}">${issueProductDisplayName(p.id, p.name)}</option>`).join('')
+    + `<option value="other">${t('issueOptOther')}</option>`;
   sel.value = '';
   document.getElementById('issueProductOther').value = '';
   document.getElementById('issueProductOtherWrap').style.display = 'none';
@@ -1550,6 +1667,8 @@ function openIssueForm() {
   const prodDateEl = document.getElementById('issueProdDate');
   prodDateEl.value = '';
   prodDateEl.max = localISODate(new Date());
+  prodDateEl.style.borderColor = '';
+  document.getElementById('issueProdDateErr').style.display = 'none';
   document.getElementById('issueBatchNo').value = '';
   document.getElementById('issueDesc').value = '';
   document.getElementById('issueReporterName').value = document.getElementById('submitterName').value || '';
@@ -1557,7 +1676,7 @@ function openIssueForm() {
   document.getElementById('issuePhotoPreview').innerHTML = '';
   document.getElementById('issuePhotoInput').value = '';
   const btn = document.getElementById('issueSubmitBtn');
-  btn.disabled = false; btn.textContent = '送出通報';
+  btn.disabled = false; btn.textContent = t('issueBtnSubmit');
   document.getElementById('issueFormOverlay').style.display = 'flex';
 }
 
@@ -1605,7 +1724,7 @@ function compressImage(file, maxSize = 1280, quality = 0.7) {
 async function onIssuePhotoSelect(event) {
   const files = Array.from(event.target.files || []);
   for (const file of files) {
-    if (issuePhotoBlobs.length >= 6) { showToast('最多上傳 6 張照片'); break; }
+    if (issuePhotoBlobs.length >= 6) { showToast(t('toastMaxPhotos')); break; }
     try {
       const blob = await compressImage(file);
       issuePhotoBlobs.push({ blob, url: URL.createObjectURL(blob) });
@@ -1628,6 +1747,22 @@ function removeIssuePhoto(i) {
   renderIssuePhotoPreview();
 }
 
+// 生產日期即時驗證：手機上 toast 易被鍵盤/日期選單擋住，改用常駐紅字提示
+function validateIssueProdDate() {
+  const el = document.getElementById('issueProdDate');
+  const err = document.getElementById('issueProdDateErr');
+  if (!el || !err) return true;
+  const today = localISODate(new Date());
+  if (el.value && el.value > today) {
+    err.style.display = 'block';
+    el.style.borderColor = '#ef4444';
+    return false;
+  }
+  err.style.display = 'none';
+  el.style.borderColor = '';
+  return true;
+}
+
 async function submitIssue() {
   const productSel = document.getElementById('issueProduct').value;
   const issueType = document.getElementById('issueType').value;
@@ -1644,17 +1779,21 @@ async function submitIssue() {
   const prodDate = document.getElementById('issueProdDate').value;
   const batchNo = document.getElementById('issueBatchNo').value.trim();
 
-  if (!productName)  { showToast('請選擇或輸入問題品項'); return; }
-  if (!issueType)    { showToast('請選擇問題類型'); return; }
-  if (!prodDate)     { showToast('請填寫生產日期'); return; }
-  if (prodDate > localISODate(new Date())) { showToast('生產日期不可晚於今天'); return; }
-  if (!batchNo)      { showToast('請填寫批號'); return; }
-  if (!/^[0-9]+$/.test(batchNo)) { showToast('批號僅能輸入數字'); return; }
-  if (!desc)         { showToast('請填寫問題描述'); return; }
-  if (!reporterName) { showToast('請填寫提報人姓名'); return; }
+  if (!productName)  { showToast(t('toastSelectProduct')); return; }
+  if (!issueType)    { showToast(t('toastSelectType')); return; }
+  if (!prodDate)     { showToast(t('toastFillProdDate')); return; }
+  if (!validateIssueProdDate()) {
+    showToast(t('toastProdDateFuture'));
+    document.getElementById('issueProdDate').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  if (!batchNo)      { showToast(t('toastFillBatch')); return; }
+  if (!/^[0-9]+$/.test(batchNo)) { showToast(t('toastBatchNumeric')); return; }
+  if (!desc)         { showToast(t('toastFillDesc')); return; }
+  if (!reporterName) { showToast(t('toastFillReporter')); return; }
 
   const btn = document.getElementById('issueSubmitBtn');
-  btn.disabled = true; btn.textContent = '送出中…';
+  btn.disabled = true; btn.textContent = t('issueBtnSubmitting');
 
   try {
     const now = new Date();
@@ -1691,38 +1830,39 @@ async function submitIssue() {
     });
     if (error) throw error;
 
-    showToast('✅ 通報已送出');
+    showToast(t('toastIssueSubmitted'));
     closeIssueForm();
     renderIssueList();
   } catch(e) {
     console.error('submitIssue error:', e);
     const msg = e.message || e.error_description || JSON.stringify(e);
-    showToast('送出失敗：' + msg);
-    alert('送出失敗：\n' + msg);
-    btn.disabled = false; btn.textContent = '送出通報';
+    showToast(t('toastIssueSubmitFail') + msg);
+    alert(t('toastIssueSubmitFail') + '\n' + msg);
+    btn.disabled = false; btn.textContent = t('issueBtnSubmit');
   }
 }
 
 async function renderIssueList() {
   const content = document.getElementById('issueListContent');
-  if (!currentStore) { content.innerHTML = `<div class="history-empty">請先選擇門市</div>`; return; }
-  content.innerHTML = `<div class="history-empty">載入中…</div>`;
+  if (!currentStore) { content.innerHTML = `<div class="history-empty">${t('toastStore')}</div>`; return; }
+  content.innerHTML = `<div class="history-empty">${t('issueListLoading')}</div>`;
   const { data, error } = await sb.from('product_issues').select('*')
     .eq('store_key', currentStore).order('created_at', { ascending:false }).limit(30);
-  if (error) { content.innerHTML = `<div class="history-empty">載入失敗：${error.message}</div>`; return; }
+  if (error) { content.innerHTML = `<div class="history-empty">${t('issueListLoadError')}${error.message}</div>`; return; }
   issueListCache = data || [];
-  if (!issueListCache.length) { content.innerHTML = `<div class="history-empty">📭 尚無異常通報紀錄</div>`; return; }
+  if (!issueListCache.length) { content.innerHTML = `<div class="history-empty">${t('issueListEmpty')}</div>`; return; }
+  const locale = currentLang === 'ja' ? 'ja-JP' : 'zh-TW';
   content.innerHTML = issueListCache.map(issue => {
     const statusCls = issue.status === '已結案' ? 'closed' : (issue.status === '處理中' ? 'processing' : 'pending');
-    const time = new Date(issue.created_at).toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    const time = new Date(issue.created_at).toLocaleString(locale,{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
     return `
     <div class="history-card" onclick="openIssueDetail('${issue.id}')" style="cursor:pointer">
       <div class="history-header">
         <div>
-          <div class="week-label">${issue.product_name}</div>
-          <div class="issue-card-meta"><span class="issue-type-tag">${issue.issue_type}</span>　${time}</div>
+          <div class="week-label">${issueProductDisplayName(issue.product_id, issue.product_name)}</div>
+          <div class="issue-card-meta"><span class="issue-type-tag">${issLabel(issue.issue_type, ISSUE_TYPE_JA)}</span>　${time}</div>
         </div>
-        <span class="issue-status ${statusCls}">${issue.status}</span>
+        <span class="issue-status ${statusCls}">${issLabel(issue.status, ISSUE_STATUS_JA)}</span>
       </div>
     </div>`;
   }).join('');
@@ -1732,34 +1872,35 @@ function openIssueDetail(id) {
   const issue = issueListCache.find(x => x.id === id);
   if (!issue) return;
   const statusCls = issue.status === '已結案' ? 'closed' : (issue.status === '處理中' ? 'processing' : 'pending');
-  const time = new Date(issue.created_at).toLocaleString('zh-TW',{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const locale = currentLang === 'ja' ? 'ja-JP' : 'zh-TW';
+  const time = new Date(issue.created_at).toLocaleString(locale,{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
   let html = `
     <div style="text-align:center;margin-bottom:12px">
-      <span class="issue-status ${statusCls}" style="font-size:13px;padding:4px 12px">${issue.status}</span>
+      <span class="issue-status ${statusCls}" style="font-size:13px;padding:4px 12px">${issLabel(issue.status, ISSUE_STATUS_JA)}</span>
     </div>
-    <div class="detail-row"><span class="dl">案件編號</span><span class="dv">${issue.case_no}</span></div>
-    <div class="detail-row"><span class="dl">通報時間</span><span class="dv">${time}</span></div>
-    <div class="detail-row"><span class="dl">品項</span><span class="dv">${issue.product_name}</span></div>
-    <div class="detail-row"><span class="dl">問題類型</span><span class="dv">${issue.issue_type}</span></div>
-    ${issue.quantity_affected != null ? `<div class="detail-row"><span class="dl">問題數量</span><span class="dv">${issue.quantity_affected} ${issue.quantity_unit||''}</span></div>` : ''}
-    ${issue.remaining_stock_qty != null ? `<div class="detail-row"><span class="dl">同批剩餘庫存</span><span class="dv">${issue.remaining_stock_qty} ${issue.quantity_unit||''}</span></div>` : ''}
-    ${issue.production_date ? `<div class="detail-row"><span class="dl">生產日期</span><span class="dv">${issue.production_date}</span></div>` : ''}
-    ${issue.batch_no ? `<div class="detail-row"><span class="dl">批號</span><span class="dv">${issue.batch_no}</span></div>` : ''}
-    <div class="detail-row"><span class="dl">提報人</span><span class="dv">${issue.reporter_name||''}</span></div>
-    <div class="detail-section-title">問題描述</div>
+    <div class="detail-row"><span class="dl">${t('issueDetailCaseNo')}</span><span class="dv">${issue.case_no}</span></div>
+    <div class="detail-row"><span class="dl">${t('issueDetailTime')}</span><span class="dv">${time}</span></div>
+    <div class="detail-row"><span class="dl">${t('issueDetailItem')}</span><span class="dv">${issueProductDisplayName(issue.product_id, issue.product_name)}</span></div>
+    <div class="detail-row"><span class="dl">${t('issueDetailType')}</span><span class="dv">${issLabel(issue.issue_type, ISSUE_TYPE_JA)}</span></div>
+    ${issue.quantity_affected != null ? `<div class="detail-row"><span class="dl">${t('issueDetailQty')}</span><span class="dv">${issue.quantity_affected} ${issue.quantity_unit||''}</span></div>` : ''}
+    ${issue.remaining_stock_qty != null ? `<div class="detail-row"><span class="dl">${t('issueDetailRemain')}</span><span class="dv">${issue.remaining_stock_qty} ${issue.quantity_unit||''}</span></div>` : ''}
+    ${issue.production_date ? `<div class="detail-row"><span class="dl">${t('issueDetailProdDate')}</span><span class="dv">${issue.production_date}</span></div>` : ''}
+    ${issue.batch_no ? `<div class="detail-row"><span class="dl">${t('issueDetailBatch')}</span><span class="dv">${issue.batch_no}</span></div>` : ''}
+    <div class="detail-row"><span class="dl">${t('issueDetailReporter')}</span><span class="dv">${issue.reporter_name||''}</span></div>
+    <div class="detail-section-title">${t('issueDetailDescTitle')}</div>
     <div style="font-size:13px;line-height:1.6;white-space:pre-wrap">${issue.description}</div>`;
 
   if (issue.photos && issue.photos.length) {
-    html += `<div class="detail-section-title">照片</div><div class="photo-preview">${issue.photos.map(u=>`<a href="${u}" target="_blank" class="photo-thumb"><img src="${u}"></a>`).join('')}</div>`;
+    html += `<div class="detail-section-title">${t('issueDetailPhotoTitle')}</div><div class="photo-preview">${issue.photos.map(u=>`<a href="${u}" target="_blank" class="photo-thumb"><img src="${u}"></a>`).join('')}</div>`;
   }
 
-  html += `<div class="detail-section-title">央廚處理回饋</div>`;
+  html += `<div class="detail-section-title">${t('issueDetailFeedbackTitle')}</div>`;
   if (issue.responsibility || issue.resolution || issue.handler_notes) {
-    if (issue.responsibility) html += `<div class="detail-row"><span class="dl">責任歸屬</span><span class="dv">${issue.responsibility}</span></div>`;
-    if (issue.resolution)     html += `<div class="detail-row"><span class="dl">處理方式</span><span class="dv">${issue.resolution}</span></div>`;
+    if (issue.responsibility) html += `<div class="detail-row"><span class="dl">${t('issueDetailResp')}</span><span class="dv">${issLabel(issue.responsibility, ISSUE_RESP_JA)}</span></div>`;
+    if (issue.resolution)     html += `<div class="detail-row"><span class="dl">${t('issueDetailResolution')}</span><span class="dv">${issLabel(issue.resolution, ISSUE_RESO_JA)}</span></div>`;
     if (issue.handler_notes)  html += `<div style="font-size:13px;line-height:1.6;white-space:pre-wrap;margin-top:6px">${issue.handler_notes}</div>`;
   } else {
-    html += `<div style="font-size:13px;color:var(--muted)">處理中，尚未填寫處理結果</div>`;
+    html += `<div style="font-size:13px;color:var(--muted)">${t('issueDetailNoFeedback')}</div>`;
   }
 
   document.getElementById('issueDetailBody').innerHTML = html;

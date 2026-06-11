@@ -32,8 +32,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .stat-value { font-size: 26px; font-weight: 800; }
 .blue{color:var(--primary);} .green{color:var(--green);} .orange{color:var(--orange);} .red{color:var(--red);} .purple{color:var(--special);}
 .tabs { display: flex; gap: 3px; background: #e2e8f0; border-radius: 8px; padding: 3px; margin-bottom: 16px; width: fit-content; flex-wrap: wrap; }
-.tab { padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--muted); }
+.tab { padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; color: var(--muted); position: relative; }
 .tab.active { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.nav-badge { display: none; position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 16px; border-radius: 8px; text-align: center; }
 .section-card { background: var(--card); border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); overflow: hidden; margin-bottom: 16px; }
 .section-header { padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .section-header h3 { font-size: 14px; font-weight: 800; }
@@ -204,7 +205,7 @@ tr:hover td { background: #f8fafc; }
     <div class="tab" id="t8" onclick="switchTab(8)">🥘 品項管理</div>
     <div class="tab" id="t6" onclick="switchTab(6)">🏪 門市管理</div>
     <div class="tab" id="t7" onclick="switchTab(7)">👤 帳號管理</div>
-    <div class="tab" id="t9" onclick="switchTab(9)">🚨 異常處理</div>
+    <div class="tab" id="t9" onclick="switchTab(9)">🚨 異常處理<span id="issueAdminBadge" class="nav-badge"></span></div>
   </div>
 
   <!-- P1 -->
@@ -506,9 +507,13 @@ tr:hover td { background: #f8fafc; }
             <option value="4weeks">近4週</option>
           </select>
           <button id="p9RefreshBtn" class="btn btn-outline btn-sm" onclick="loadIssues()">🔄 重新整理</button>
-          <button id="p9CopyBtn" class="btn btn-success btn-sm" onclick="copyIssueSummaryText()">📋 複製彙總文字</button>
           <button id="p9ImageBtnEl" class="btn btn-success btn-sm" onclick="generateIssueSummaryImage()">🖼️ 產生彙總圖片</button>
         </div>
+      </div>
+      <div style="padding:10px 16px;background:#eff6ff;border-top:1px solid #bfdbfe;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:700;color:#1e40af;white-space:nowrap">📋 看板分享文案</span>
+        <input id="issueBoardMsg" readonly style="flex:1;min-width:200px;padding:8px 12px;border:1.5px solid #bfdbfe;border-radius:7px;font-size:13px;font-weight:600;background:#fff;color:#1e293b">
+        <button id="issueBoardCopyBtn" class="btn btn-outline btn-sm">複製</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -866,6 +871,7 @@ async function startAdmin() {
   await Promise.all([loadData(), loadProductSettings()]);
   renderSettings();
   applyRoleRestrictions();
+  checkNewIssuesBadge();
 }  // end startAdmin
 
 async function loadData() {
@@ -2136,7 +2142,33 @@ function switchTab(n) {
   if(n===6) renderStoreList();
   if(n===7) loadUserList();
   if(n===8) renderProductList();
-  if(n===9) loadIssues();
+  if(n===9) { loadIssues(); markIssuesSeen(); }
+}
+
+// 異常通報「新案件」提示徽章（後台端記憶最後查看時間）
+async function checkNewIssuesBadge() {
+  const badge = document.getElementById('issueAdminBadge');
+  if (!badge) return;
+  const lastSeen = localStorage.getItem('adminIssueLastSeen');
+  if (!lastSeen) {
+    // 首次使用：建立基準時間，不回溯既有案件
+    localStorage.setItem('adminIssueLastSeen', new Date().toISOString());
+    badge.style.display = 'none';
+    return;
+  }
+  const { count, error } = await sb.from('product_issues')
+    .select('id', { count: 'exact', head: true })
+    .gt('created_at', lastSeen);
+  if (error) { console.warn('checkNewIssuesBadge error', error); return; }
+  if (count > 0) { badge.textContent = count > 9 ? '9+' : String(count); badge.style.display = 'inline-block'; }
+  else { badge.style.display = 'none'; }
+}
+
+// 進入「異常處理」頁籤時，更新最後查看時間並隱藏徽章
+function markIssuesSeen() {
+  localStorage.setItem('adminIssueLastSeen', new Date().toISOString());
+  const badge = document.getElementById('issueAdminBadge');
+  if (badge) badge.style.display = 'none';
 }
 
 // ========================
@@ -2475,7 +2507,6 @@ const T_ADMIN = {
     p9ModalResolutionLbl:'處理方式', p9ModalNotesLbl:'處理情形說明（門市可查看）',
     p9ModalSave:'💾 儲存處理結果', p9ModalCancel:'取消', p9NotFilled:'（未填）',
     p9SaveSuccess:'✅ 已更新案件狀態', p9SaveError:'❌ 儲存失敗：',
-    p9CopySummary:'📋 複製彙總文字', p9CopySuccess:'✅ 已複製彙總文字，可貼到群組', p9CopyFail:'❌ 複製失敗，請手動選取',
     p9CopyHeader:'品項異常彙總', p9CopyNoIssues:'本範圍內無異常案件',
     p9ImageBtn:'🖼️ 產生彙總圖片', p9ImageGenerating:'⏳ 圖片產生中…', p9ImageSuccess:'✅ 已產生彙總圖片，可分享至群組',
     p9ImageFail:'❌ 圖片產生失敗，請稍後再試', p9ImageGenAt:'產生時間', p9CaseDetailTitle:'📋 案件明細',
@@ -2562,7 +2593,6 @@ const T_ADMIN = {
     p9ModalResolutionLbl:'対応方法', p9ModalNotesLbl:'対応状況の説明（店舗閲覧可）',
     p9ModalSave:'💾 対応結果を保存', p9ModalCancel:'キャンセル', p9NotFilled:'（未入力）',
     p9SaveSuccess:'✅ 案件状態を更新しました', p9SaveError:'❌ 保存失敗：',
-    p9CopySummary:'📋 概要をコピー', p9CopySuccess:'✅ 概要をコピーしました。グループに貼り付けできます', p9CopyFail:'❌ コピー失敗、手動で選択してください',
     p9CopyHeader:'商品別異常集計', p9CopyNoIssues:'この期間内に異常案件はありません',
     p9ImageBtn:'🖼️ 概要画像を生成', p9ImageGenerating:'⏳ 画像を生成中…', p9ImageSuccess:'✅ 概要画像を生成しました。グループに共有できます',
     p9ImageFail:'❌ 画像の生成に失敗しました。もう一度お試しください', p9ImageGenAt:'生成日時', p9CaseDetailTitle:'📋 案件詳細',
@@ -2580,7 +2610,7 @@ function applyAdminLang() {
   s('statLblSubmitted','statSubmitted'); s('statLblPending','statPending'); s('statLblBoxes','statBoxes');
   for(let i=1;i<=9;i++){const el=document.getElementById(`t${i}`);if(el)el.textContent=ta(`tab${i}`);}
   // P9 異常處理 靜態文字
-  s('p9CaseTitleEl','p9CaseTitle'); s('p9RefreshBtn','p9Refresh'); s('p9CopyBtn','p9CopySummary'); s('p9ImageBtnEl','p9ImageBtn');
+  s('p9CaseTitleEl','p9CaseTitle'); s('p9RefreshBtn','p9Refresh'); s('p9ImageBtnEl','p9ImageBtn');
   s('p9Th1','p9ColTime'); s('p9Th2','p9ColStore'); s('p9Th3','p9ColItem'); s('p9Th4','p9ColType');
   s('p9Th5','p9ColQty'); s('p9Th6','p9ColRemain'); s('p9Th7','p9ColBatch'); s('p9Th8','p9ColReporter');
   s('p9Th9','p9ColStatus'); s('p9Th10','p9ColOp');
@@ -2789,74 +2819,6 @@ function renderIssuesPanel() {
   }
 }
 
-// 將目前篩選範圍內的異常案件彙整成可貼到群組的文字，並複製到剪貼簿
-function copyIssueSummaryText() {
-  const rangeF = document.getElementById('issueFilterRange').value;
-  const rangeLabels = { all:ta('p9FilterAllRange'), thisweek:ta('p9RangeThisWeek'), lastweek:ta('p9RangeLastWeek'), '4weeks':ta('p9Range4Weeks') };
-  const storeMaster = getEffectiveStoreMaster();
-  const storeName = key => (storeMaster.find(s=>s.key===key)||{}).fullName || key;
-  const list = lastFilteredIssues || [];
-
-  const pending    = list.filter(i=>i.status==='待處理').length;
-  const processing = list.filter(i=>i.status==='處理中').length;
-  const closed     = list.filter(i=>i.status==='已結案').length;
-
-  const lines = [];
-  lines.push(`📊 ${ta('p9CopyHeader')}（${rangeLabels[rangeF] || ''}）`);
-  lines.push(`${ta('p9StatTotal')}：${list.length}　${ta('p9StatPending')}：${pending}　${ta('p9StatProcessing')}：${processing}　${ta('p9StatClosed')}：${closed}`);
-
-  if (!list.length) {
-    lines.push('');
-    lines.push(ta('p9CopyNoIssues'));
-  } else {
-    list.forEach(it => {
-      const d = new Date(it.created_at);
-      const dateStr = `${fmt(d)}`;
-      let line = `\n🚨 ${it.case_no}\n${ta('p9ModalStore')}${storeName(it.store_key)}　${dateStr}`
-        + `\n${ta('p9ModalItem')}${it.product_name}　${ta('p9ModalType')}${issLabel(it.issue_type, ISSUE_TYPE_JA)}`
-        + `\n${ta('p9ColStatus')}：${issLabel(it.status, ISSUE_STATUS_JA)}`;
-      if (it.responsibility) line += `　${ta('p9ModalRespLbl')}：${issLabel(it.responsibility, ISSUE_RESP_JA)}`;
-      if (it.resolution)     line += `　${ta('p9ModalResolutionLbl')}：${issLabel(it.resolution, ISSUE_RESO_JA)}`;
-      if (it.handler_notes)  line += `\n${it.handler_notes}`;
-      lines.push(line);
-    });
-
-    if (lastIssueSummaryRows.length) {
-      lines.push('');
-      lines.push(`【${ta('p9CopyHeader')}】`);
-      lastIssueSummaryRows.forEach(r => {
-        const names = [...r.stores].map(storeName).join('、');
-        lines.push(`・${r.product}｜${issLabel(r.type, ISSUE_TYPE_JA)}｜${r.count}　(${names})`);
-      });
-    }
-  }
-
-  const text = lines.join('\n');
-
-  const done = () => showToast(ta('p9CopySuccess'));
-  const fail = () => showToast(ta('p9CopyFail'));
-
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done, fail));
-  } else {
-    fallbackCopy(text, done, fail);
-  }
-}
-
-function fallbackCopy(text, done, fail) {
-  try {
-    const ta_ = document.createElement('textarea');
-    ta_.value = text;
-    ta_.style.position = 'fixed';
-    ta_.style.opacity = '0';
-    document.body.appendChild(ta_);
-    ta_.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta_);
-    ok ? done() : fail();
-  } catch(e) { fail(); }
-}
-
 // 將目前篩選範圍內的異常案件彙整成一張報表圖片（PNG），下載後可直接分享到 LINE 群組
 async function generateIssueSummaryImage() {
   if (typeof html2canvas === 'undefined') { showToast(ta('p9ImageFail')); return; }
@@ -2899,6 +2861,7 @@ async function generateIssueSummaryImage() {
         return `<div style="padding:8px 0;border-bottom:1px solid #f1f5f9">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b"><span>${it.case_no}　${storeName(it.store_key)}</span><span>${dateStr}</span></div>
           <div style="font-size:14px;font-weight:700;margin:2px 0">${it.product_name}　<span style="font-weight:400;font-size:12px;color:#475569">${issLabel(it.issue_type, ISSUE_TYPE_JA)}</span></div>
+          <div style="font-size:12px;color:#0f766e;font-weight:600;margin-bottom:2px">🏷️ ${ta('p9ModalProdDate')}${it.production_date || '—'}${ta('p9ModalBatch')}${it.batch_no || '—'}</div>
           <div style="font-size:12px"><span style="color:${statusColor};font-weight:700">${issLabel(it.status, ISSUE_STATUS_JA)}</span>${extra ? '　'+extra : ''}</div>
           ${it.handler_notes ? `<div style="font-size:12px;color:#475569;margin-top:2px">${it.handler_notes}</div>` : ''}
         </div>`;
@@ -3273,6 +3236,20 @@ init();
       var el = document.getElementById('daiwaMsg');
       if (!el || !el.value) { showToast('本週無台北車站訂單'); return; }
       if (navigator.clipboard) { navigator.clipboard.writeText(el.value).then(function(){ showToast('✅ 已複製大榮貨運預約文字'); }); }
+      else { el.select(); document.execCommand('copy'); showToast('✅ 已複製'); }
+    };
+
+    // 異常處理看板 分享文案
+    var ibm = document.getElementById('issueBoardMsg');
+    if (ibm) {
+      var boardUrl = window.location.origin + '/issues-board.html';
+      ibm.value = '【珍有福 異常處理看板】\n隨時查看異常通報處理進度：\n' + boardUrl;
+    }
+    var ibb = document.getElementById('issueBoardCopyBtn');
+    if (ibb) ibb.onclick = function() {
+      var el = document.getElementById('issueBoardMsg');
+      if (!el || !el.value) return;
+      if (navigator.clipboard) { navigator.clipboard.writeText(el.value).then(function(){ showToast('✅ 已複製看板連結文案'); }); }
       else { el.select(); document.execCommand('copy'); showToast('✅ 已複製'); }
     };
   });

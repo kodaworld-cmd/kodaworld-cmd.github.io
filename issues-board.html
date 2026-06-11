@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="異常看板">
+<title>珍有福 異常處理看板</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #2563eb; --primary-dk: #1d4ed8;
+  --bg: #f1f5f9; --card: #fff; --border: #e2e8f0;
+  --text: #1e293b; --muted: #64748b;
+  --green: #16a34a; --red: #dc2626; --orange: #d97706;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding-bottom: 30px; }
+
+.header { background: var(--primary); color: #fff; padding: 14px 16px; position: sticky; top: 0; z-index: 100; box-shadow: 0 1px 6px rgba(0,0,0,0.12); }
+.header-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.header h1 { font-size: 16px; font-weight: 800; }
+.refresh-btn { background: rgba(255,255,255,0.2); border: none; color: #fff; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0; }
+.refresh-btn:active { background: rgba(255,255,255,0.35); }
+.header-sub { font-size: 11px; opacity: 0.85; margin-top: 4px; }
+
+.board { padding: 12px; max-width: 640px; margin: 0 auto; }
+
+.stats-row { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 14px; }
+.stat-card { background: var(--card); border-radius: 10px; padding: 10px 6px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+.stat-label { font-size: 11px; color: var(--muted); font-weight: 700; }
+.stat-value { font-size: 20px; font-weight: 800; margin-top: 2px; }
+.stat-value.orange { color: var(--orange); }
+.stat-value.blue { color: var(--primary); }
+.stat-value.green { color: var(--green); }
+
+.section-title { font-size: 14px; font-weight: 800; margin: 4px 0 10px; display: flex; align-items: center; gap: 6px; }
+.count-badge { background: var(--border); color: var(--text); font-size: 11px; font-weight: 800; border-radius: 10px; padding: 1px 8px; }
+
+.issue-card { background: var(--card); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
+.issue-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 8px; }
+.case-no { font-size: 11px; color: var(--muted); font-family: monospace; }
+.issue-status { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 11px; font-weight: 800; white-space: nowrap; }
+.issue-status.pending { background: #fef3c7; color: #92400e; }
+.issue-status.processing { background: #dbeafe; color: #1d4ed8; }
+.issue-status.closed { background: #dcfce7; color: #166534; }
+.issue-card-main { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.store-name { font-size: 14px; font-weight: 800; }
+.product-name { font-size: 14px; font-weight: 700; }
+.issue-type-tag { display: inline-block; background: #f1f5f9; color: var(--text); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
+.issue-card-meta { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+.issue-desc { font-size: 13px; margin-top: 8px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.photo-preview { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.photo-thumb { width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); display: block; }
+.photo-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.resolved-box { margin-top: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #166534; line-height: 1.7; }
+
+.closed-section { margin-top: 18px; }
+.closed-section summary { font-size: 14px; font-weight: 800; cursor: pointer; padding: 12px 14px; background: var(--card); border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 6px; list-style: none; }
+.closed-section summary::-webkit-details-marker { display: none; }
+.closed-section summary::after { content: '展開 ▾'; margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 700; }
+.closed-section[open] summary::after { content: '收合 ▴'; }
+.closed-section[open] summary { border-radius: 12px 12px 0 0; }
+.closed-section > .closed-list { padding-top: 10px; }
+
+.empty-msg { text-align: center; color: var(--muted); padding: 30px 20px; font-size: 13px; background: var(--card); border-radius: 12px; }
+.loading-msg { text-align: center; color: var(--muted); padding: 40px 20px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <h1>🚨 珍有福 異常處理看板</h1>
+    <button class="refresh-btn" onclick="loadAll()">🔄 重新整理</button>
+  </div>
+  <div class="header-sub" id="updatedAt">載入中…</div>
+</div>
+
+<div class="board">
+  <div class="stats-row" id="statsRow"></div>
+
+  <div class="section-title">🔴 進行中案件 <span class="count-badge" id="activeCount">0</span></div>
+  <div id="activeList"><div class="loading-msg">載入中…</div></div>
+
+  <details class="closed-section" id="closedDetails">
+    <summary>✅ 已結案紀錄（近4週） <span class="count-badge" id="closedCount">0</span></summary>
+    <div class="closed-list" id="closedList"></div>
+  </details>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://jpabzycaqybbvebwewrt.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_nNp7DYbaTBtWm39agYBczg_c1sR7-4F';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// 靜態門市對照表（門市代號 → 顯示名稱），避免依賴需登入才能讀取的設定資料表
+const STORE_NAMES = {
+  '台中米平方':'珍有福 台中米平方店', '土城日月光':'珍有福 土城日月光店', '高雄成功':'珍有福 高雄成功店',
+  '台南中正':'珍有福 台南中正店', '台北內湖':'珍有福 台北內湖店', '龜山文青':'珍有福 龜山文青店',
+  '台南安平':'珍有福 台南安平店', '土城家樂福':'珍有福 土城家樂福店', '台南新仁':'珍有福 台南新仁店',
+  '桃園經國':'珍有福 桃園經國店', '台南仁德':'珍有福 台南仁德店', '高雄新楠':'珍有福 高雄新楠店',
+  '嘉義嘉義':'珍有福 嘉義家樂福店', '台南新營':'珍有福 台南新營店', '台南東門':'珍有福 台南東門店',
+  '台北車站':'珍有福 台北車站店', '雲林斗六':'珍有福 雲林斗六店', '宜蘭店':'珍有福 宜蘭家樂福店',
+  '內壢':'珍有福 內壢家樂福店', '南投家樂福':'珍有福 南投家樂福店', '大樂':'珍有福 高雄大樂店',
+  '新店碧潭':'珍有福 新店碧潭店', '台中西屯':'珍有福 台中西屯店', '台中文心':'珍有福 台中文心店',
+  '小港漢民':'珍有福 小港漢民店', '新店家樂福':'珍有福 新店家樂福店', '大全聯':'珍有福 台南大全聯店',
+  '南投埔里':'珍有福 南投埔里店', '台中大里':'珍有福 大里大買家店', '台中青海':'珍有福 台中青海店',
+  '高雄光華':'珍有福 高雄光華店', '三重溪尾':'珍有福 三重溪尾店', '小碧潭京站':'珍有福 小碧潭京站店',
+};
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+function fmtDateTime(s) {
+  const d = new Date(s);
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function fmtDate(s) {
+  const d = new Date(s);
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())}`;
+}
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = (day === 0 ? -6 : 1) - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
+
+// 提報人姓名遮蔽：固定遮蔽第二個字，例如「王小明」→「王*明」
+function maskReporter(name) {
+  if (!name) return '—';
+  if (name.length < 2) return name;
+  return name[0] + '*' + name.slice(2);
+}
+
+function renderCard(it, isClosed) {
+  const statusCls = it.status === '待處理' ? 'pending' : it.status === '處理中' ? 'processing' : 'closed';
+  const storeName = STORE_NAMES[it.store_key] || it.store_key;
+  const qty = it.quantity_affected != null ? `${it.quantity_affected}${it.quantity_unit || ''}` : '—';
+  const remain = it.remaining_stock_qty != null ? `${it.remaining_stock_qty}${it.quantity_unit || ''}` : '—';
+
+  const batchInfo = [];
+  if (it.production_date) batchInfo.push(`生產日期 ${it.production_date}`);
+  if (it.batch_no) batchInfo.push(`批號 ${it.batch_no}`);
+
+  const photos = (it.photos || []).map(url =>
+    `<a class="photo-thumb" href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" loading="lazy"></a>`
+  ).join('');
+
+  let resolvedInfo = '';
+  if (isClosed) {
+    const parts = [];
+    if (it.responsibility) parts.push(`責任歸屬：${it.responsibility}`);
+    if (it.resolution) parts.push(`處理方式：${it.resolution}`);
+    if (it.handler_notes) parts.push(`處理說明：${it.handler_notes}`);
+    if (it.closed_at) parts.push(`結案時間：${fmtDate(it.closed_at)}`);
+    if (parts.length) resolvedInfo = `<div class="resolved-box">${parts.map(p => `<div>${esc(p)}</div>`).join('')}</div>`;
+  }
+
+  return `<div class="issue-card">
+    <div class="issue-card-top">
+      <span class="issue-status ${statusCls}">${esc(it.status)}</span>
+      <span class="case-no">${esc(it.case_no || '')}</span>
+    </div>
+    <div class="issue-card-main">
+      <span class="store-name">${esc(storeName)}</span>
+      <span class="product-name">${esc(it.product_name)}</span>
+      <span class="issue-type-tag">${esc(it.issue_type)}</span>
+    </div>
+    <div class="issue-card-meta">📅 通報時間：${fmtDateTime(it.created_at)}　|　提報人：${esc(maskReporter(it.reporter_name))}</div>
+    <div class="issue-card-meta">問題數量：${esc(qty)}　|　同批剩餘庫存：${esc(remain)}</div>
+    ${batchInfo.length ? `<div class="issue-card-meta">${batchInfo.map(esc).join('　|　')}</div>` : ''}
+    <div class="issue-desc">${esc(it.description)}</div>
+    ${photos ? `<div class="photo-preview">${photos}</div>` : ''}
+    ${resolvedInfo}
+  </div>`;
+}
+
+async function loadAll() {
+  document.getElementById('updatedAt').textContent = '載入中…';
+  const { data, error } = await sb.from('product_issues').select('*').order('created_at', { ascending: true });
+  if (error) {
+    document.getElementById('updatedAt').textContent = '讀取失敗：' + error.message;
+    document.getElementById('activeList').innerHTML = `<div class="empty-msg">資料讀取失敗，請稍後重新整理</div>`;
+    return;
+  }
+  const all = data || [];
+
+  const active = all.filter(it => it.status !== '已結案');
+
+  const mon = getMonday(new Date());
+  const cutoff = addDays(mon, -21); // 近4週（含本週共4週）
+  const closed = all.filter(it => it.status === '已結案')
+    .filter(it => new Date(it.closed_at || it.updated_at || it.created_at) >= cutoff)
+    .sort((a, b) => new Date(b.closed_at || b.updated_at || b.created_at) - new Date(a.closed_at || a.updated_at || a.created_at));
+
+  // 統計
+  const pending = active.filter(i => i.status === '待處理').length;
+  const processing = active.filter(i => i.status === '處理中').length;
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="stat-label">待處理</div><div class="stat-value orange">${pending}</div></div>
+    <div class="stat-card"><div class="stat-label">處理中</div><div class="stat-value blue">${processing}</div></div>
+    <div class="stat-card"><div class="stat-label">近4週已結案</div><div class="stat-value green">${closed.length}</div></div>
+  `;
+
+  // 進行中案件（依通報時間由舊到新，最久未處理者排最前）
+  document.getElementById('activeCount').textContent = active.length;
+  document.getElementById('activeList').innerHTML = active.length
+    ? active.map(it => renderCard(it, false)).join('')
+    : `<div class="empty-msg">目前沒有待處理或處理中的案件 🎉</div>`;
+
+  // 已結案紀錄（近4週，依結案時間由新到舊）
+  document.getElementById('closedCount').textContent = closed.length;
+  document.getElementById('closedList').innerHTML = closed.length
+    ? closed.map(it => renderCard(it, true)).join('')
+    : `<div class="empty-msg">近4週無已結案紀錄</div>`;
+
+  const now = new Date();
+  document.getElementById('updatedAt').textContent = `更新時間：${fmtDateTime(now)}（每2分鐘自動更新）`;
+}
+
+loadAll();
+setInterval(loadAll, 120000);
+</script>
+</body>
+</html>
