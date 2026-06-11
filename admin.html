@@ -506,6 +506,8 @@ tr:hover td { background: #f8fafc; }
             <option value="4weeks">近4週</option>
           </select>
           <button id="p9RefreshBtn" class="btn btn-outline btn-sm" onclick="loadIssues()">🔄 重新整理</button>
+          <button id="p9CopyBtn" class="btn btn-success btn-sm" onclick="copyIssueSummaryText()">📋 複製彙總文字</button>
+          <button id="p9ImageBtnEl" class="btn btn-success btn-sm" onclick="generateIssueSummaryImage()">🖼️ 產生彙總圖片</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -531,6 +533,7 @@ tr:hover td { background: #f8fafc; }
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 // ========================
 // Supabase
@@ -2472,6 +2475,10 @@ const T_ADMIN = {
     p9ModalResolutionLbl:'處理方式', p9ModalNotesLbl:'處理情形說明（門市可查看）',
     p9ModalSave:'💾 儲存處理結果', p9ModalCancel:'取消', p9NotFilled:'（未填）',
     p9SaveSuccess:'✅ 已更新案件狀態', p9SaveError:'❌ 儲存失敗：',
+    p9CopySummary:'📋 複製彙總文字', p9CopySuccess:'✅ 已複製彙總文字，可貼到群組', p9CopyFail:'❌ 複製失敗，請手動選取',
+    p9CopyHeader:'品項異常彙總', p9CopyNoIssues:'本範圍內無異常案件',
+    p9ImageBtn:'🖼️ 產生彙總圖片', p9ImageGenerating:'⏳ 圖片產生中…', p9ImageSuccess:'✅ 已產生彙總圖片，可分享至群組',
+    p9ImageFail:'❌ 圖片產生失敗，請稍後再試', p9ImageGenAt:'產生時間', p9CaseDetailTitle:'📋 案件明細',
   },
   ja: {
     title:'📊 手作出荷管理システム', subtitle:'中央キッチン / 本部',
@@ -2555,6 +2562,10 @@ const T_ADMIN = {
     p9ModalResolutionLbl:'対応方法', p9ModalNotesLbl:'対応状況の説明（店舗閲覧可）',
     p9ModalSave:'💾 対応結果を保存', p9ModalCancel:'キャンセル', p9NotFilled:'（未入力）',
     p9SaveSuccess:'✅ 案件状態を更新しました', p9SaveError:'❌ 保存失敗：',
+    p9CopySummary:'📋 概要をコピー', p9CopySuccess:'✅ 概要をコピーしました。グループに貼り付けできます', p9CopyFail:'❌ コピー失敗、手動で選択してください',
+    p9CopyHeader:'商品別異常集計', p9CopyNoIssues:'この期間内に異常案件はありません',
+    p9ImageBtn:'🖼️ 概要画像を生成', p9ImageGenerating:'⏳ 画像を生成中…', p9ImageSuccess:'✅ 概要画像を生成しました。グループに共有できます',
+    p9ImageFail:'❌ 画像の生成に失敗しました。もう一度お試しください', p9ImageGenAt:'生成日時', p9CaseDetailTitle:'📋 案件詳細',
   }
 };
 
@@ -2569,7 +2580,7 @@ function applyAdminLang() {
   s('statLblSubmitted','statSubmitted'); s('statLblPending','statPending'); s('statLblBoxes','statBoxes');
   for(let i=1;i<=9;i++){const el=document.getElementById(`t${i}`);if(el)el.textContent=ta(`tab${i}`);}
   // P9 異常處理 靜態文字
-  s('p9CaseTitleEl','p9CaseTitle'); s('p9RefreshBtn','p9Refresh');
+  s('p9CaseTitleEl','p9CaseTitle'); s('p9RefreshBtn','p9Refresh'); s('p9CopyBtn','p9CopySummary'); s('p9ImageBtnEl','p9ImageBtn');
   s('p9Th1','p9ColTime'); s('p9Th2','p9ColStore'); s('p9Th3','p9ColItem'); s('p9Th4','p9ColType');
   s('p9Th5','p9ColQty'); s('p9Th6','p9ColRemain'); s('p9Th7','p9ColBatch'); s('p9Th8','p9ColReporter');
   s('p9Th9','p9ColStatus'); s('p9Th10','p9ColOp');
@@ -2623,6 +2634,8 @@ function showToast(msg) {
 // 異常處理 (P9)
 // ========================
 let allIssues = [];
+let lastFilteredIssues = [];
+let lastIssueSummaryRows = [];
 const ISSUE_RESPONSIBILITY_OPTIONS = ['原料供應商','央廚-生產','央廚-包裝','物流配送','門市操作','其他'];
 const ISSUE_RESOLUTION_OPTIONS = ['原門市報廢','退回央廚','換貨補寄','其他'];
 const ISSUE_TYPE_OPTIONS = ['異物','品質','保存期限','數量短缺','包裝','其他'];
@@ -2751,6 +2764,8 @@ function renderIssuesPanel() {
     }).join('');
   }
 
+  lastFilteredIssues = filtered;
+
   // 品項異常彙總
   const rangeLabels = { all:ta('p9FilterAllRange'), thisweek:ta('p9RangeThisWeek'), lastweek:ta('p9RangeLastWeek'), '4weeks':ta('p9Range4Weeks') };
   document.getElementById('issueSummaryRangeLabel').textContent = rangeLabels[rangeF] || '';
@@ -2762,6 +2777,7 @@ function renderIssuesPanel() {
     summaryMap[key].stores.add(it.store_key);
   });
   const summaryRows = Object.values(summaryMap).sort((a,b)=>b.count-a.count);
+  lastIssueSummaryRows = summaryRows;
   const sBody = document.getElementById('issueSummaryBody');
   if (!summaryRows.length) {
     sBody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--muted)">${ta('p9NoData')}</td></tr>`;
@@ -2770,6 +2786,166 @@ function renderIssuesPanel() {
       const names = [...r.stores].map(storeName).join('、');
       return `<tr><td>${r.product}</td><td><span class="issue-type-tag">${issLabel(r.type, ISSUE_TYPE_JA)}</span></td><td class="c">${r.count}</td><td>${names}</td></tr>`;
     }).join('');
+  }
+}
+
+// 將目前篩選範圍內的異常案件彙整成可貼到群組的文字，並複製到剪貼簿
+function copyIssueSummaryText() {
+  const rangeF = document.getElementById('issueFilterRange').value;
+  const rangeLabels = { all:ta('p9FilterAllRange'), thisweek:ta('p9RangeThisWeek'), lastweek:ta('p9RangeLastWeek'), '4weeks':ta('p9Range4Weeks') };
+  const storeMaster = getEffectiveStoreMaster();
+  const storeName = key => (storeMaster.find(s=>s.key===key)||{}).fullName || key;
+  const list = lastFilteredIssues || [];
+
+  const pending    = list.filter(i=>i.status==='待處理').length;
+  const processing = list.filter(i=>i.status==='處理中').length;
+  const closed     = list.filter(i=>i.status==='已結案').length;
+
+  const lines = [];
+  lines.push(`📊 ${ta('p9CopyHeader')}（${rangeLabels[rangeF] || ''}）`);
+  lines.push(`${ta('p9StatTotal')}：${list.length}　${ta('p9StatPending')}：${pending}　${ta('p9StatProcessing')}：${processing}　${ta('p9StatClosed')}：${closed}`);
+
+  if (!list.length) {
+    lines.push('');
+    lines.push(ta('p9CopyNoIssues'));
+  } else {
+    list.forEach(it => {
+      const d = new Date(it.created_at);
+      const dateStr = `${fmt(d)}`;
+      let line = `\n🚨 ${it.case_no}\n${ta('p9ModalStore')}${storeName(it.store_key)}　${dateStr}`
+        + `\n${ta('p9ModalItem')}${it.product_name}　${ta('p9ModalType')}${issLabel(it.issue_type, ISSUE_TYPE_JA)}`
+        + `\n${ta('p9ColStatus')}：${issLabel(it.status, ISSUE_STATUS_JA)}`;
+      if (it.responsibility) line += `　${ta('p9ModalRespLbl')}：${issLabel(it.responsibility, ISSUE_RESP_JA)}`;
+      if (it.resolution)     line += `　${ta('p9ModalResolutionLbl')}：${issLabel(it.resolution, ISSUE_RESO_JA)}`;
+      if (it.handler_notes)  line += `\n${it.handler_notes}`;
+      lines.push(line);
+    });
+
+    if (lastIssueSummaryRows.length) {
+      lines.push('');
+      lines.push(`【${ta('p9CopyHeader')}】`);
+      lastIssueSummaryRows.forEach(r => {
+        const names = [...r.stores].map(storeName).join('、');
+        lines.push(`・${r.product}｜${issLabel(r.type, ISSUE_TYPE_JA)}｜${r.count}　(${names})`);
+      });
+    }
+  }
+
+  const text = lines.join('\n');
+
+  const done = () => showToast(ta('p9CopySuccess'));
+  const fail = () => showToast(ta('p9CopyFail'));
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done, fail));
+  } else {
+    fallbackCopy(text, done, fail);
+  }
+}
+
+function fallbackCopy(text, done, fail) {
+  try {
+    const ta_ = document.createElement('textarea');
+    ta_.value = text;
+    ta_.style.position = 'fixed';
+    ta_.style.opacity = '0';
+    document.body.appendChild(ta_);
+    ta_.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta_);
+    ok ? done() : fail();
+  } catch(e) { fail(); }
+}
+
+// 將目前篩選範圍內的異常案件彙整成一張報表圖片（PNG），下載後可直接分享到 LINE 群組
+async function generateIssueSummaryImage() {
+  if (typeof html2canvas === 'undefined') { showToast(ta('p9ImageFail')); return; }
+
+  const rangeF = document.getElementById('issueFilterRange').value;
+  const rangeLabels = { all:ta('p9FilterAllRange'), thisweek:ta('p9RangeThisWeek'), lastweek:ta('p9RangeLastWeek'), '4weeks':ta('p9Range4Weeks') };
+  const storeMaster = getEffectiveStoreMaster();
+  const storeName = key => (storeMaster.find(s=>s.key===key)||{}).fullName || key;
+  const list = lastFilteredIssues || [];
+
+  const pending    = list.filter(i=>i.status==='待處理').length;
+  const processing = list.filter(i=>i.status==='處理中').length;
+  const closed     = list.filter(i=>i.status==='已結案').length;
+
+  showToast(ta('p9ImageGenerating'));
+
+  const now = new Date();
+  const genTimeStr = `${now.getFullYear()}/${fmt(now)} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+  const summaryRowsHtml = (lastIssueSummaryRows || []).length
+    ? lastIssueSummaryRows.map(r => {
+        const names = [...r.stores].map(storeName).join('、');
+        return `<tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${r.product}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${issLabel(r.type, ISSUE_TYPE_JA)}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700">${r.count}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #e2e8f0">${names}</td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="4" style="padding:10px;text-align:center;color:#64748b">${ta('p9NoData')}</td></tr>`;
+
+  const caseRowsHtml = list.length
+    ? list.map(it => {
+        const d = new Date(it.created_at);
+        const dateStr = fmt(d);
+        const statusColor = it.status==='待處理' ? '#dc2626' : it.status==='處理中' ? '#d97706' : '#16a34a';
+        let extra = '';
+        if (it.responsibility) extra += `${ta('p9ModalRespLbl')}：${issLabel(it.responsibility, ISSUE_RESP_JA)}　`;
+        if (it.resolution)     extra += `${ta('p9ModalResolutionLbl')}：${issLabel(it.resolution, ISSUE_RESO_JA)}`;
+        return `<div style="padding:8px 0;border-bottom:1px solid #f1f5f9">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b"><span>${it.case_no}　${storeName(it.store_key)}</span><span>${dateStr}</span></div>
+          <div style="font-size:14px;font-weight:700;margin:2px 0">${it.product_name}　<span style="font-weight:400;font-size:12px;color:#475569">${issLabel(it.issue_type, ISSUE_TYPE_JA)}</span></div>
+          <div style="font-size:12px"><span style="color:${statusColor};font-weight:700">${issLabel(it.status, ISSUE_STATUS_JA)}</span>${extra ? '　'+extra : ''}</div>
+          ${it.handler_notes ? `<div style="font-size:12px;color:#475569;margin-top:2px">${it.handler_notes}</div>` : ''}
+        </div>`;
+      }).join('')
+    : `<div style="padding:16px;text-align:center;color:#64748b">${ta('p9CopyNoIssues')}</div>`;
+
+  const card = document.createElement('div');
+  card.id = 'issueSummaryImageCard';
+  card.style.cssText = 'position:fixed;left:-9999px;top:0;width:720px;background:#fff;font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;color:#1e293b;padding:28px;';
+  card.innerHTML = `
+    <div style="font-size:20px;font-weight:800;margin-bottom:4px">📊 ${ta('p9CopyHeader')}</div>
+    <div style="font-size:13px;color:#64748b;margin-bottom:16px">${rangeLabels[rangeF]||''}　·　${ta('p9ImageGenAt')} ${genTimeStr}</div>
+    <div style="display:flex;gap:10px;margin-bottom:18px">
+      <div style="flex:1;background:#f1f5f9;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800">${list.length}</div><div style="font-size:12px;color:#64748b">${ta('p9StatTotal')}</div></div>
+      <div style="flex:1;background:#fef2f2;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#dc2626">${pending}</div><div style="font-size:12px;color:#64748b">${ta('p9StatPending')}</div></div>
+      <div style="flex:1;background:#fffbeb;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#d97706">${processing}</div><div style="font-size:12px;color:#64748b">${ta('p9StatProcessing')}</div></div>
+      <div style="flex:1;background:#f0fdf4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:22px;font-weight:800;color:#16a34a">${closed}</div><div style="font-size:12px;color:#64748b">${ta('p9StatClosed')}</div></div>
+    </div>
+    <div style="font-size:14px;font-weight:800;margin-bottom:8px">${ta('p9SummaryTitle')}</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:18px">
+      <thead><tr style="background:#f8fafc">
+        <th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e2e8f0">${ta('p9ColSumItem')}</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e2e8f0">${ta('p9ColSumType')}</th>
+        <th style="padding:6px 8px;text-align:center;border-bottom:2px solid #e2e8f0">${ta('p9ColSumCount')}</th>
+        <th style="padding:6px 8px;text-align:left;border-bottom:2px solid #e2e8f0">${ta('p9ColSumStores')}</th>
+      </tr></thead>
+      <tbody>${summaryRowsHtml}</tbody>
+    </table>
+    <div style="font-size:14px;font-weight:800;margin-bottom:8px">${ta('p9CaseDetailTitle')}</div>
+    <div>${caseRowsHtml}</div>
+    <div style="margin-top:16px;text-align:right;font-size:11px;color:#94a3b8">珍有福中央廚房</div>
+  `;
+  document.body.appendChild(card);
+
+  try {
+    const canvas = await html2canvas(card, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    const fileDate = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+    const link = document.createElement('a');
+    link.download = `異常彙總_${fileDate}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    showToast(ta('p9ImageSuccess'));
+  } catch(e) {
+    console.error('generateIssueSummaryImage error', e);
+    showToast(ta('p9ImageFail'));
+  } finally {
+    document.body.removeChild(card);
   }
 }
 

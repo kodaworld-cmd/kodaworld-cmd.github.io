@@ -25,8 +25,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
 .header-sub { font-size: 12px; opacity: 0.8; margin-top: 4px; }
 .nav-tabs { display: flex; background: #1e40af; }
-.nav-tab { flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.65); cursor: pointer; border-bottom: 3px solid transparent; }
+.nav-tab { position: relative; flex: 1; padding: 10px; text-align: center; font-size: 13px; font-weight: 700; color: rgba(255,255,255,0.65); cursor: pointer; border-bottom: 3px solid transparent; }
 .nav-tab.active { color: #fff; border-bottom-color: #fff; }
+.nav-badge { display: none; position: absolute; top: 4px; right: 14px; min-width: 16px; height: 16px; padding: 0 4px; background: #ef4444; color: #fff; font-size: 10px; font-weight: 800; line-height: 16px; border-radius: 8px; text-align: center; }
 .setup-section { margin: 12px; }
 .setup-card { background: var(--card); border-radius: 12px; padding: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.07); }
 .field label { font-size: 12px; color: var(--muted); font-weight: 700; display: block; margin-bottom: 5px; }
@@ -224,7 +225,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div class="nav-tabs">
   <div class="nav-tab active" id="navOrder" onclick="switchNav('order')">本週訂貨</div>
   <div class="nav-tab" id="navHistory" onclick="switchNav('history')">訂貨紀錄</div>
-  <div class="nav-tab" id="navIssue" onclick="switchNav('issue')">異常通報</div>
+  <div class="nav-tab" id="navIssue" onclick="switchNav('issue')">異常通報<span id="issueUnreadBadge" class="nav-badge"></span></div>
   <div class="nav-tab" style="margin-left:auto;padding:10px 14px;font-size:12px;color:rgba(255,255,255,0.6);cursor:pointer" onclick="doLogout()">登出</div>
 </div>
 
@@ -976,6 +977,7 @@ function onStoreChange() {
   document.getElementById('headerSub').textContent = currentStore ? `${currentStore}　配送日 ${fmtShort(del)}` : '請選擇門市';
   loadOrderState();
   if (document.getElementById('pageIssue').style.display !== 'none') renderIssueList();
+  checkIssueUpdates();
 }
 
 async function loadOrderState() {
@@ -1507,6 +1509,30 @@ function showToast(msg) {
 let issueListCache = [];
 let issuePhotoBlobs = []; // [{blob, url}]
 
+// 異常案件「有更新」提醒（裝置端記憶，比對央廚最後處理時間 handled_at）
+function getIssueSeenMap() {
+  try { return JSON.parse(localStorage.getItem('issueSeenMap') || '{}'); } catch(e) { return {}; }
+}
+function setIssueSeen(id, ts) {
+  try {
+    const map = getIssueSeenMap();
+    map[id] = ts || new Date().toISOString();
+    localStorage.setItem('issueSeenMap', JSON.stringify(map));
+  } catch(e) {}
+}
+async function checkIssueUpdates() {
+  const badge = document.getElementById('issueUnreadBadge');
+  if (!badge) return;
+  if (!currentStore) { badge.style.display = 'none'; return; }
+  const { data, error } = await sb.from('product_issues').select('id, handled_at')
+    .eq('store_key', currentStore);
+  if (error) { console.warn('checkIssueUpdates error', error); return; }
+  const map = getIssueSeenMap();
+  const unread = (data || []).filter(it => it.handled_at && (!map[it.id] || new Date(map[it.id]) < new Date(it.handled_at)));
+  if (unread.length) { badge.textContent = unread.length > 9 ? '9+' : String(unread.length); badge.style.display = 'inline-block'; }
+  else { badge.style.display = 'none'; }
+}
+
 function openIssueForm() {
   if (!currentStore) { showToast('請先選擇門市'); return; }
   const sel = document.getElementById('issueProduct');
@@ -1738,6 +1764,10 @@ function openIssueDetail(id) {
 
   document.getElementById('issueDetailBody').innerHTML = html;
   document.getElementById('issueDetailOverlay').style.display = 'flex';
+
+  // 標記為已讀（依目前央廚最後處理時間），更新提醒徽章
+  if (issue.handled_at) setIssueSeen(issue.id, issue.handled_at);
+  checkIssueUpdates();
 }
 
 function closeIssueDetail() {
