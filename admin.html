@@ -56,6 +56,11 @@ tr:hover td { background: #f8fafc; }
 .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; }
 .badge-ok { background: #f0fdf4; color: var(--green); }
 .badge-wait { background: #fffbeb; color: var(--orange); }
+.issue-status { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 11px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.issue-status.pending { background: #fef3c7; color: #92400e; }
+.issue-status.processing { background: #dbeafe; color: #1d4ed8; }
+.issue-status.closed { background: #dcfce7; color: #166534; }
+.issue-type-tag { display: inline-block; background: #f1f5f9; color: var(--text); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 5px; }
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 10px; padding: 14px; }
 .prod-sum { background: #f8fafc; border-radius: 8px; padding: 12px 14px; border: 1.5px solid var(--border); }
 .prod-sum.active { background: #eff6ff; border-color: #bfdbfe; }
@@ -196,6 +201,7 @@ tr:hover td { background: #f8fafc; }
     <div class="tab" id="t8" onclick="switchTab(8)">🥘 品項管理</div>
     <div class="tab" id="t6" onclick="switchTab(6)">🏪 門市管理</div>
     <div class="tab" id="t7" onclick="switchTab(7)">👤 帳號管理</div>
+    <div class="tab" id="t9" onclick="switchTab(9)">🚨 異常處理</div>
   </div>
 
   <!-- P1 -->
@@ -471,6 +477,52 @@ tr:hover td { background: #f8fafc; }
     </div>
   </div>
 
+  <!-- P9：異常處理 -->
+  <div id="p9" style="display:none">
+    <div class="stats-row" id="issueStatsRow"></div>
+    <div class="section-card">
+      <div class="section-header">
+        <h3>🚨 異常通報案件</h3>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <select id="issueFilterStore" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px"><option value="">全部門市</option></select>
+          <select id="issueFilterStatus" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px">
+            <option value="">全部狀態</option>
+            <option value="待處理">待處理</option>
+            <option value="處理中">處理中</option>
+            <option value="已結案">已結案</option>
+          </select>
+          <select id="issueFilterType" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px">
+            <option value="">全部類型</option>
+            <option value="異物">異物</option><option value="品質">品質</option><option value="保存期限">保存期限</option>
+            <option value="數量短缺">數量短缺</option><option value="包裝">包裝</option><option value="其他">其他</option>
+          </select>
+          <select id="issueFilterRange" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px">
+            <option value="all">全部時間</option>
+            <option value="thisweek">本週</option>
+            <option value="lastweek">上週</option>
+            <option value="4weeks">近4週</option>
+          </select>
+          <button class="btn btn-outline btn-sm" onclick="loadIssues()">🔄 重新整理</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>時間</th><th>門市</th><th>品項</th><th>問題類型</th><th class="c">數量</th><th>同批剩餘</th><th>批號／效期</th><th>提報人</th><th class="c">狀態</th><th class="c">操作</th>
+          </tr></thead>
+          <tbody id="issueListBody"><tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">載入中…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="section-header"><h3>📊 品項異常彙總（依目前篩選範圍）</h3><span style="font-size:12px;color:var(--muted)" id="issueSummaryRangeLabel"></span></div>
+      <div class="table-wrap">
+        <table><thead><tr><th>品項</th><th>問題類型</th><th class="c">件數</th><th>涉及門市</th></tr></thead><tbody id="issueSummaryBody"></tbody></table>
+      </div>
+    </div>
+  </div>
+
 </div><!-- end #adminApp -->
 
 </div>
@@ -653,6 +705,7 @@ function getWeeks() {
 const ROLE_LABELS = { admin:'管理者', manager:'區經理', viewer:'查看', store:'門市' };
 const ROLE_COLORS = { admin:'#f5f3ff:#7c3aed', manager:'#eff6ff:#2563eb', viewer:'#f0fdf4:#16a34a', store:'#f8fafc:#64748b' };
 let currentAdminRole = 'admin';
+let currentAdminUserId = null;
 
 function roleLabel(r) { return ROLE_LABELS[r] || r; }
 function roleBadge(r) {
@@ -690,6 +743,7 @@ async function doAdminLogin() {
     return;
   }
   currentAdminRole = profile?.role || (profile?.is_admin ? 'admin' : 'store');
+  currentAdminUserId = data.user.id;
   document.getElementById('adminLoginScreen').style.display = 'none';
   document.getElementById('adminApp').style.display = 'block';
   await startAdmin();
@@ -726,6 +780,7 @@ async function init() {
   if (!canAccessAdmin(profile)) { showAdminLogin(); return; }
 
   currentAdminRole = profile?.role || (profile?.is_admin ? 'admin' : 'store');
+  currentAdminUserId = session.user.id;
   document.getElementById('adminLoginScreen').style.display = 'none';
   document.getElementById('adminApp').style.display = 'block';
   await startAdmin();
@@ -2048,7 +2103,7 @@ async function clearAllOrders() {
 }
 
 function switchTab(n) {
-  [1,2,3,4,5,6,7,8].forEach(i=>{
+  [1,2,3,4,5,6,7,8,9].forEach(i=>{
     const t=document.getElementById(`t${i}`); const p=document.getElementById(`p${i}`);
     if(t) t.classList.toggle('active',i===n);
     if(p) p.style.display=i===n?'block':'none';
@@ -2057,6 +2112,7 @@ function switchTab(n) {
   if(n===6) renderStoreList();
   if(n===7) loadUserList();
   if(n===8) renderProductList();
+  if(n===9) loadIssues();
 }
 
 // ========================
@@ -2491,6 +2547,205 @@ function showToast(msg) {
   if(!t){t=document.createElement('div');t.id='toast';t.style.cssText='position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:999;transition:opacity 0.3s';document.body.appendChild(t);}
   t.textContent=msg;t.style.opacity='1';
   toastTimer=setTimeout(()=>{t.style.opacity='0';},2500);
+}
+
+// ========================
+// 異常處理 (P9)
+// ========================
+let allIssues = [];
+const ISSUE_RESPONSIBILITY_OPTIONS = ['原料供應商','央廚-生產','央廚-包裝','物流配送','門市操作','其他'];
+const ISSUE_RESOLUTION_OPTIONS = ['原門市報廢','退回央廚','換貨補寄','其他'];
+
+async function loadIssues() {
+  const tbody = document.getElementById('issueListBody');
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">載入中…</td></tr>';
+  const { data, error } = await sb.from('product_issues').select('*').order('created_at', { ascending:false });
+  if (error) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">載入失敗：'+error.message+'</td></tr>'; return; }
+  allIssues = data || [];
+
+  const sel = document.getElementById('issueFilterStore');
+  const cur = sel.value;
+  const stores = getEffectiveStoreMaster();
+  sel.innerHTML = '<option value="">全部門市</option>' + stores.map(s=>`<option value="${s.key}">${s.fullName}</option>`).join('');
+  sel.value = cur;
+
+  renderIssuesPanel();
+}
+
+function getIssueDateRange(rangeKey) {
+  const now = new Date();
+  const mon = getMonday(now);
+  if (rangeKey === 'thisweek') return { start: mon, end: addDays(mon, 7) };
+  if (rangeKey === 'lastweek') return { start: addDays(mon, -7), end: mon };
+  if (rangeKey === '4weeks')   return { start: addDays(mon, -21), end: addDays(mon, 7) };
+  return null;
+}
+
+function renderIssuesPanel() {
+  const storeF  = document.getElementById('issueFilterStore').value;
+  const statusF = document.getElementById('issueFilterStatus').value;
+  const typeF   = document.getElementById('issueFilterType').value;
+  const rangeF  = document.getElementById('issueFilterRange').value;
+  const range   = getIssueDateRange(rangeF);
+
+  const filtered = allIssues.filter(it => {
+    if (storeF && it.store_key !== storeF) return false;
+    if (statusF && it.status !== statusF) return false;
+    if (typeF && it.issue_type !== typeF) return false;
+    if (range) {
+      const t = new Date(it.created_at);
+      if (t < range.start || t >= range.end) return false;
+    }
+    return true;
+  });
+
+  // 統計卡片
+  const pending    = filtered.filter(i=>i.status==='待處理').length;
+  const processing = filtered.filter(i=>i.status==='處理中').length;
+  const closed     = filtered.filter(i=>i.status==='已結案').length;
+  document.getElementById('issueStatsRow').innerHTML = `
+    <div class="stat-card"><div class="stat-label">案件總數</div><div class="stat-value blue">${filtered.length}</div></div>
+    <div class="stat-card"><div class="stat-label">待處理</div><div class="stat-value orange">${pending}</div></div>
+    <div class="stat-card"><div class="stat-label">處理中</div><div class="stat-value blue">${processing}</div></div>
+    <div class="stat-card"><div class="stat-label">已結案</div><div class="stat-value green">${closed}</div></div>
+  `;
+
+  // 案件列表
+  const tbody = document.getElementById('issueListBody');
+  const storeMaster = getEffectiveStoreMaster();
+  const storeName = key => (storeMaster.find(s=>s.key===key)||{}).fullName || key;
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">沒有符合條件的案件</td></tr>';
+  } else {
+    tbody.innerHTML = filtered.map(it => {
+      const d = new Date(it.created_at);
+      const timeStr = `${fmt(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const statusCls = it.status==='待處理' ? 'pending' : it.status==='處理中' ? 'processing' : 'closed';
+      const qty    = it.quantity_affected   != null ? `${it.quantity_affected}${it.quantity_unit||''}`   : '—';
+      const remain = it.remaining_stock_qty != null ? `${it.remaining_stock_qty}${it.quantity_unit||''}` : '—';
+      return `<tr>
+        <td>${timeStr}</td>
+        <td>${storeName(it.store_key)}</td>
+        <td>${it.product_name}</td>
+        <td><span class="issue-type-tag">${it.issue_type}</span></td>
+        <td class="c">${qty}</td>
+        <td class="c">${remain}</td>
+        <td>${it.batch_info || '—'}</td>
+        <td>${it.reporter_name || '—'}</td>
+        <td class="c"><span class="issue-status ${statusCls}" onclick="openIssueProcessModal('${it.id}')">${it.status}</span></td>
+        <td class="c"><button class="btn btn-outline btn-sm" onclick="openIssueProcessModal('${it.id}')">處理</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // 品項異常彙總
+  const rangeLabels = { all:'全部時間', thisweek:'本週', lastweek:'上週', '4weeks':'近4週' };
+  document.getElementById('issueSummaryRangeLabel').textContent = rangeLabels[rangeF] || '';
+  const summaryMap = {};
+  filtered.forEach(it => {
+    const key = it.product_name + '|' + it.issue_type;
+    if (!summaryMap[key]) summaryMap[key] = { product: it.product_name, type: it.issue_type, count: 0, stores: new Set() };
+    summaryMap[key].count++;
+    summaryMap[key].stores.add(it.store_key);
+  });
+  const summaryRows = Object.values(summaryMap).sort((a,b)=>b.count-a.count);
+  const sBody = document.getElementById('issueSummaryBody');
+  if (!summaryRows.length) {
+    sBody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--muted)">無資料</td></tr>';
+  } else {
+    sBody.innerHTML = summaryRows.map(r => {
+      const names = [...r.stores].map(storeName).join('、');
+      return `<tr><td>${r.product}</td><td><span class="issue-type-tag">${r.type}</span></td><td class="c">${r.count}</td><td>${names}</td></tr>`;
+    }).join('');
+  }
+}
+
+function openIssueProcessModal(id) {
+  const it = allIssues.find(x => x.id === id);
+  if (!it) return;
+  const canEdit = currentAdminRole === 'admin' || currentAdminRole === 'manager';
+  const d = new Date(it.created_at);
+  const timeStr = `${d.getFullYear()}/${fmt(d)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  const storeName = (getEffectiveStoreMaster().find(s=>s.key===it.store_key)||{}).fullName || it.store_key;
+  const photos = Array.isArray(it.photos) ? it.photos : [];
+
+  const modal = document.createElement('div');
+  modal.id = 'issueProcessModal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML =
+    '<div style="background:#fff;border-radius:12px;padding:20px;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">' +
+        '<h3 style="font-size:15px;font-weight:800">🚨 案件 ' + it.case_no + '</h3>' +
+        '<button id="ipClose" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>' +
+      '</div>' +
+      '<div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:10px">' +
+        '門市：<b style="color:var(--text)">' + storeName + '</b>　時間：' + timeStr + '<br>' +
+        '品項：<b style="color:var(--text)">' + it.product_name + '</b>　類型：<span class="issue-type-tag">' + it.issue_type + '</span><br>' +
+        '數量：' + (it.quantity_affected!=null ? (it.quantity_affected + (it.quantity_unit||'')) : '—') +
+          '　同批剩餘庫存：' + (it.remaining_stock_qty!=null ? (it.remaining_stock_qty + (it.quantity_unit||'')) : '—') + '<br>' +
+        '批號／效期：' + (it.batch_info || '—') + '　提報人：' + (it.reporter_name || '—') +
+      '</div>' +
+      '<div style="background:#f8fafc;border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px;white-space:pre-wrap">' + (it.description || '') + '</div>' +
+      (photos.length ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' +
+        photos.map(u => '<a href="'+u+'" target="_blank"><img src="'+u+'" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"></a>').join('') +
+      '</div>' : '') +
+      '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px">' +
+        '<div style="font-size:13px;font-weight:800;margin-bottom:8px">📋 央廚處理回饋</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">' +
+          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">案件狀態</label>' +
+            '<select id="ipStatus" '+(canEdit?'':'disabled')+' style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+              ['待處理','處理中','已結案'].map(s=>'<option value="'+s+'" '+(it.status===s?'selected':'')+'>'+s+'</option>').join('') +
+            '</select></div>' +
+          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">責任歸屬</label>' +
+            '<select id="ipResp" '+(canEdit?'':'disabled')+' style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+              '<option value="">（未填）</option>' +
+              ISSUE_RESPONSIBILITY_OPTIONS.map(o=>'<option value="'+o+'" '+(it.responsibility===o?'selected':'')+'>'+o+'</option>').join('') +
+            '</select></div>' +
+        '</div>' +
+        '<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">處理方式</label>' +
+          '<select id="ipResolution" '+(canEdit?'':'disabled')+' style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
+            '<option value="">（未填）</option>' +
+            ISSUE_RESOLUTION_OPTIONS.map(o=>'<option value="'+o+'" '+(it.resolution===o?'selected':'')+'>'+o+'</option>').join('') +
+          '</select></div>' +
+        '<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">處理情形說明（門市可查看）</label>' +
+          '<textarea id="ipNotes" '+(canEdit?'':'disabled')+' rows="3" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit">'+(it.handler_notes||'')+'</textarea></div>' +
+        (canEdit ?
+          '<div style="display:flex;gap:8px">' +
+            '<button id="ipSave" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存處理結果</button>' +
+            '<button id="ipCancel" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button>' +
+          '</div>' : '') +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(modal);
+
+  document.getElementById('ipClose').onclick = () => modal.remove();
+  if (canEdit) {
+    document.getElementById('ipCancel').onclick = () => modal.remove();
+    document.getElementById('ipSave').onclick = () => saveIssueProcess(id, modal);
+  }
+}
+
+async function saveIssueProcess(id, modal) {
+  const status         = document.getElementById('ipStatus').value;
+  const responsibility = document.getElementById('ipResp').value || null;
+  const resolution     = document.getElementById('ipResolution').value || null;
+  const handler_notes  = document.getElementById('ipNotes').value.trim() || null;
+
+  const payload = { status, responsibility, resolution, handler_notes };
+  if (status !== '待處理') {
+    payload.handled_by = currentAdminUserId;
+    payload.handled_at = new Date().toISOString();
+  }
+  payload.closed_at = status === '已結案' ? new Date().toISOString() : null;
+
+  const { error } = await sb.from('product_issues').update(payload).eq('id', id);
+  if (error) { showToast('❌ 儲存失敗：' + error.message); return; }
+
+  const it = allIssues.find(x => x.id === id);
+  if (it) Object.assign(it, payload);
+  modal.remove();
+  showToast('✅ 已更新案件狀態');
+  renderIssuesPanel();
 }
 
 init();
