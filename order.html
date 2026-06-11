@@ -350,9 +350,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
           </div>
         </div>
       </div>
-      <div class="field">
-        <label>批號／效期資訊</label>
-        <input id="issueBatch" type="text" placeholder="例：2026.04.23 批號5（包裝上若無標示請填「無」）">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field">
+          <label>生產日期 <span style="color:#ef4444">*</span></label>
+          <input id="issueProdDate" type="date">
+        </div>
+        <div class="field">
+          <label>批號 <span style="color:#ef4444">*</span></label>
+          <input id="issueBatchNo" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="僅數字，例：5">
+        </div>
       </div>
       <div class="field">
         <label>問題描述 <span style="color:#ef4444">*</span></label>
@@ -1517,7 +1523,10 @@ function openIssueForm() {
   document.getElementById('issueQtyUnit').value = '';
   document.getElementById('issueRemainQty').value = '';
   document.getElementById('issueRemainUnit').value = '';
-  document.getElementById('issueBatch').value = '';
+  const prodDateEl = document.getElementById('issueProdDate');
+  prodDateEl.value = '';
+  prodDateEl.max = localISODate(new Date());
+  document.getElementById('issueBatchNo').value = '';
   document.getElementById('issueDesc').value = '';
   document.getElementById('issueReporterName').value = document.getElementById('submitterName').value || '';
   issuePhotoBlobs = [];
@@ -1608,8 +1617,15 @@ async function submitIssue() {
     const p = PRODUCTS.find(x => String(x.id) === productSel);
     if (p) { productName = p.name; productId = p.id; }
   }
+  const prodDate = document.getElementById('issueProdDate').value;
+  const batchNo = document.getElementById('issueBatchNo').value.trim();
+
   if (!productName)  { showToast('請選擇或輸入問題品項'); return; }
   if (!issueType)    { showToast('請選擇問題類型'); return; }
+  if (!prodDate)     { showToast('請填寫生產日期'); return; }
+  if (prodDate > localISODate(new Date())) { showToast('生產日期不可晚於今天'); return; }
+  if (!batchNo)      { showToast('請填寫批號'); return; }
+  if (!/^[0-9]+$/.test(batchNo)) { showToast('批號僅能輸入數字'); return; }
   if (!desc)         { showToast('請填寫問題描述'); return; }
   if (!reporterName) { showToast('請填寫提報人姓名'); return; }
 
@@ -1644,7 +1660,8 @@ async function submitIssue() {
       quantity_affected: parseFloat(document.getElementById('issueQty').value) || null,
       quantity_unit: document.getElementById('issueQtyUnit').value.trim() || null,
       remaining_stock_qty: parseFloat(document.getElementById('issueRemainQty').value) || null,
-      batch_info: document.getElementById('issueBatch').value.trim() || null,
+      production_date: prodDate || null,
+      batch_no: batchNo || null,
       description: desc,
       photos: photoUrls,
     });
@@ -1699,7 +1716,8 @@ function openIssueDetail(id) {
     <div class="detail-row"><span class="dl">問題類型</span><span class="dv">${issue.issue_type}</span></div>
     ${issue.quantity_affected != null ? `<div class="detail-row"><span class="dl">問題數量</span><span class="dv">${issue.quantity_affected} ${issue.quantity_unit||''}</span></div>` : ''}
     ${issue.remaining_stock_qty != null ? `<div class="detail-row"><span class="dl">同批剩餘庫存</span><span class="dv">${issue.remaining_stock_qty} ${issue.quantity_unit||''}</span></div>` : ''}
-    ${issue.batch_info ? `<div class="detail-row"><span class="dl">批號／效期</span><span class="dv">${issue.batch_info}</span></div>` : ''}
+    ${issue.production_date ? `<div class="detail-row"><span class="dl">生產日期</span><span class="dv">${issue.production_date}</span></div>` : ''}
+    ${issue.batch_no ? `<div class="detail-row"><span class="dl">批號</span><span class="dv">${issue.batch_no}</span></div>` : ''}
     <div class="detail-row"><span class="dl">提報人</span><span class="dv">${issue.reporter_name||''}</span></div>
     <div class="detail-section-title">問題描述</div>
     <div style="font-size:13px;line-height:1.6;white-space:pre-wrap">${issue.description}</div>`;

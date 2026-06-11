@@ -2623,6 +2623,9 @@ function renderIssuesPanel() {
       const statusCls = it.status==='待處理' ? 'pending' : it.status==='處理中' ? 'processing' : 'closed';
       const qty    = it.quantity_affected   != null ? `${it.quantity_affected}${it.quantity_unit||''}`   : '—';
       const remain = it.remaining_stock_qty != null ? `${it.remaining_stock_qty}${it.quantity_unit||''}` : '—';
+      const batchStr = (it.production_date || it.batch_no)
+        ? `${it.production_date||'—'} ${it.batch_no?('批號'+it.batch_no):''}`.trim()
+        : '—';
       return `<tr>
         <td>${timeStr}</td>
         <td>${storeName(it.store_key)}</td>
@@ -2630,7 +2633,7 @@ function renderIssuesPanel() {
         <td><span class="issue-type-tag">${it.issue_type}</span></td>
         <td class="c">${qty}</td>
         <td class="c">${remain}</td>
-        <td>${it.batch_info || '—'}</td>
+        <td>${batchStr}</td>
         <td>${it.reporter_name || '—'}</td>
         <td class="c"><span class="issue-status ${statusCls}" onclick="openIssueProcessModal('${it.id}')">${it.status}</span></td>
         <td class="c"><button class="btn btn-outline btn-sm" onclick="openIssueProcessModal('${it.id}')">處理</button></td>
@@ -2683,7 +2686,7 @@ function openIssueProcessModal(id) {
         '品項：<b style="color:var(--text)">' + it.product_name + '</b>　類型：<span class="issue-type-tag">' + it.issue_type + '</span><br>' +
         '數量：' + (it.quantity_affected!=null ? (it.quantity_affected + (it.quantity_unit||'')) : '—') +
           '　同批剩餘庫存：' + (it.remaining_stock_qty!=null ? (it.remaining_stock_qty + (it.quantity_unit||'')) : '—') + '<br>' +
-        '批號／效期：' + (it.batch_info || '—') + '　提報人：' + (it.reporter_name || '—') +
+        '生產日期：' + (it.production_date || '—') + '　批號：' + (it.batch_no || '—') + '　提報人：' + (it.reporter_name || '—') +
       '</div>' +
       '<div style="background:#f8fafc;border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px;white-space:pre-wrap">' + (it.description || '') + '</div>' +
       (photos.length ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' +
