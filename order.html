@@ -768,11 +768,28 @@ async function initMainApp(user, assignedStores) {
       ss.appendChild(o);
     });
 
-    // 只有一家門市 → 自動選取並鎖定
-    if (allStores.length === 1) {
-      ss.value = allStores[0].key;
-      ss.disabled = true;
-      ss.style.background = '#f1f5f9';
+    // 若依名稱比對不到任何門市（例如門市名稱對應不到預設/自訂清單），
+    // 改用後台指派的門市代碼直接列出，避免下拉選單空白鎖死、無法選擇
+    if (allStores.length === 0 && assignedStores.length > 0) {
+      console.warn('門市清單比對不到指派門市，改用代碼列出：', assignedStores);
+      assignedStores.forEach(key => {
+        if (disabled.includes(key)) return;
+        const o = document.createElement('option');
+        o.value = key;
+        o.textContent = key;
+        ss.appendChild(o);
+      });
+    }
+
+    // 自動選取第一家可用門市，避免畫面卡在「選擇門市…」
+    const availableOpts = Array.from(ss.options).filter(o => o.value);
+    if (availableOpts.length >= 1) {
+      ss.value = availableOpts[0].value;
+      // 只有一家門市 → 鎖定，不可切換
+      if (availableOpts.length === 1) {
+        ss.disabled = true;
+        ss.style.background = '#f1f5f9';
+      }
       onStoreChange();
     }
   } catch(e) {
@@ -780,6 +797,15 @@ async function initMainApp(user, assignedStores) {
     assignedStores.forEach(key => {
       const o = document.createElement('option'); o.value = key; o.textContent = key; ss.appendChild(o);
     });
+    const fallbackOpts = Array.from(ss.options).filter(o => o.value);
+    if (fallbackOpts.length >= 1) {
+      ss.value = fallbackOpts[0].value;
+      if (fallbackOpts.length === 1) {
+        ss.disabled = true;
+        ss.style.background = '#f1f5f9';
+      }
+      onStoreChange();
+    }
   }
 
   const thisMonday = getOrderWeekMonday();

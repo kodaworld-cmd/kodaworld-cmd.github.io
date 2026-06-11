@@ -630,7 +630,7 @@ function getWeeks() {
   const weeks = [];
   const now = new Date(); const day = now.getDay();
   const mon = getMonday(now);
-  const orderingMon = (day === 0 || day >= 4) ? addDays(mon, 7) : mon;
+  const orderingMon = (day === 0 || day >= 5) ? addDays(mon, 7) : mon;
   const labels = ['上週', '本週', '下週', '下下週'];
   for (let i = -1; i <= 2; i++) {
     const s = addDays(orderingMon, i * 7); const thu = addDays(s, 3);
@@ -883,13 +883,17 @@ function renderDetailTable() {
   const now=new Date().toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
   document.getElementById('printHeader').textContent=`手作訂貨彙整表　${weekLabel}　列印：${now}`;
 
+  const BREAD_ID=1367;
+  const breadStyle=' style="color:var(--special);background:#faf5ff"';
+
   document.getElementById('detailHead').innerHTML = `<tr>
     <th>門市</th>
     ${PRODUCTS.map(p=>{
-      const isBread=p.id===1367;
-      const style=isBread?' style="color:var(--special);background:#faf5ff"':'';
-      const label=isBread?`${p.short}<br><span style="font-size:9px;font-weight:400;color:#9ca3af">上週</span>`:(p.short||p.name);
-      return `<th class="c" title="${p.name}"${style}>${label}</th>`;
+      if (p.id===BREAD_ID) {
+        return `<th class="c" title="${p.name}（上週訂貨，本週出貨）"${breadStyle}>${p.short}<br><span style="font-size:9px;font-weight:400;color:#9ca3af">上週訂→本週出</span></th>`
+             + `<th class="c" title="${p.name}（本週訂貨，下週出貨）"${breadStyle}>${p.short}<br><span style="font-size:9px;font-weight:400;color:#9ca3af">本週訂→下週出</span></th>`;
+      }
+      return `<th class="c" title="${p.name}">${p.short||p.name}</th>`;
     }).join('')}
     <th class="c">小計</th><th>訂貨人</th><th>送出</th><th class="c">操作</th>
   </tr>`;
@@ -898,7 +902,6 @@ function renderDetailTable() {
   const lastMap={}; lastWeekOrders.forEach(o=>{lastMap[o.store_key]=o;});
   const storeSet=new Set([...allOrders.map(o=>o.store_key),...lastWeekOrders.map(o=>o.store_key)]);
   const submitted=[...storeSet].sort((a,b)=>a.localeCompare(b));
-  const BREAD_ID=1367;
 
   // 計算本週截止時間（週一 10:00）
   const wf2=document.getElementById('weekFilter');
@@ -908,9 +911,16 @@ function renderDetailTable() {
   const rows=submitted.map(storeKey => {
     const o=orderMap[storeKey]; const oLast=lastMap[storeKey]; const data=o?.data||{};
     const cells=PRODUCTS.map(p=>{
-      const v=p.id===BREAD_ID?(oLast?.data?.[BREAD_ID]?.order||0):(data[p.id]?.order||0);
-      const extraStyle=p.id===BREAD_ID&&v>0?' style="color:var(--special);font-weight:800"':'';
-      return `<td class="qc ${v>0?'on':'off'}"${extraStyle}>${v>0?v:'—'}</td>`;
+      if (p.id===BREAD_ID) {
+        const vLast=oLast?.data?.[BREAD_ID]?.order||0;
+        const vThis=data[BREAD_ID]?.order||0;
+        const styleLast=vLast>0?' style="color:var(--special);font-weight:800"':'';
+        const styleThis=vThis>0?' style="color:var(--special);font-weight:800"':'';
+        return `<td class="qc ${vLast>0?'on':'off'}"${styleLast}>${vLast>0?vLast:'—'}</td>`
+             + `<td class="qc ${vThis>0?'on':'off'}"${styleThis}>${vThis>0?vThis:'—'}</td>`;
+      }
+      const v=data[p.id]?.order||0;
+      return `<td class="qc ${v>0?'on':'off'}">${v>0?v:'—'}</td>`;
     });
     const rowBoxes = o ? calcOrderBoxes(data) : 0;
 
@@ -933,14 +943,18 @@ function renderDetailTable() {
     return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowBoxes} 箱</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
   });
 
-  const colTotals=PRODUCTS.map(p=>p.id===BREAD_ID
-    ?lastWeekOrders.reduce((s,o)=>s+(o.data?.[BREAD_ID]?.order||0),0)
-    :allOrders.reduce((s,o)=>s+(o.data?.[p.id]?.order||0),0));
+  const colTotalsHtml=PRODUCTS.map(p=>{
+    if (p.id===BREAD_ID) {
+      const tLast=lastWeekOrders.reduce((s,o)=>s+(o.data?.[BREAD_ID]?.order||0),0);
+      const tThis=allOrders.reduce((s,o)=>s+(o.data?.[BREAD_ID]?.order||0),0);
+      return `<td class="qc ${tLast>0?'on':'off'}"${tLast>0?' style="color:var(--special)"':''}>${tLast>0?`<strong>${tLast}</strong>`:'—'}</td>`
+           + `<td class="qc ${tThis>0?'on':'off'}"${tThis>0?' style="color:var(--special)"':''}>${tThis>0?`<strong>${tThis}</strong>`:'—'}</td>`;
+    }
+    const t=allOrders.reduce((s,o)=>s+(o.data?.[p.id]?.order||0),0);
+    return `<td class="qc ${t>0?'on':'off'}">${t>0?`<strong>${t}</strong>`:'—'}</td>`;
+  }).join('');
   const grandBoxes = allOrders.reduce((s,o)=>s+calcOrderBoxes(o.data||{}),0);
-  const totRow=`<tr class="total-row"><td>合計</td>${colTotals.map((t,i)=>{
-    const isBread=PRODUCTS[i].id===BREAD_ID;
-    return `<td class="qc ${t>0?'on':'off'}"${isBread&&t>0?' style="color:var(--special)"':''}>${t>0?`<strong>${t}</strong>`:'—'}</td>`;
-  }).join('')}<td class="grand">${grandBoxes} 箱</td><td></td><td></td></tr>`;
+  const totRow=`<tr class="total-row"><td>合計</td>${colTotalsHtml}<td class="grand">${grandBoxes} 箱</td><td></td><td></td></tr>`;
   document.getElementById('detailBody').innerHTML=rows.join('')+totRow;
 }
 
@@ -1308,13 +1322,19 @@ function renderStoreList() {
 // 出貨單 PDF 生成（依 生成出貨單_完整版.py 邏輯）
 // ========================
 
-function _buildShipRows(order) {
-  const orderedProds = PRODUCTS.filter(p => (order.data?.[p.id]?.order || 0) > 0);
+function _buildShipRows(order, lastOrder) {
+  const BREAD_ID = 1367;
+  const curData  = order?.data || {};
+  const lastData = lastOrder?.data || {};
+  // 餐包（代訂）：本次出貨數量＝「上週」門市訂貨數量（本週訂的餐包是下週才出貨）
+  const getQty = (p) => (p.id === BREAD_ID ? (lastData[p.id]?.order || 0) : (curData[p.id]?.order || 0));
+
+  const orderedProds = PRODUCTS.filter(p => getQty(p) > 0);
   const boxItems   = []; // unit==='箱'：完整箱，各自一列
   const looseItems = []; // unit!=='箱'（包/罐等）：散裝，全部合併一列
 
   orderedProds.forEach(p => {
-    const qty = order.data[p.id].order;
+    const qty = getQty(p);
     const sn  = p.short || p.name; // 優先使用品項管理的縮寫
     if (p.unit === '箱') boxItems.push(`${sn}${qty}`);
     else looseItems.push(`${sn}×${qty}`);
@@ -1323,8 +1343,8 @@ function _buildShipRows(order) {
   const rows = [...boxItems];
   if (looseItems.length > 0) rows.push(looseItems.join('/'));
 
-  // 補空列到最少 19 列
-  while (rows.length < 19) rows.push('');
+  // 補空列到最少 17 列（最多 16 項完整箱品項 + 1 列散裝）
+  while (rows.length < 17) rows.push('');
   return rows;
 }
 
@@ -1340,14 +1360,21 @@ function generateShippingOrders() {
   const dateStr    = `${wed.getMonth()+1}/${wed.getDate()}`;
   const fileDateStr = `${wed.getFullYear()}${String(wed.getMonth()+1).padStart(2,'0')}${String(wed.getDate()).padStart(2,'0')}`;
 
+  const lastMap = {}; lastWeekOrders.forEach(o => { lastMap[o.store_key] = o; });
+  const BREAD_ID = 1367;
+
   const storeMaster  = getEffectiveStoreMaster();
-  const sortedStores = _sortStores(storeMaster).filter(s => allOrders.find(o => o.store_key === s.key));
+  // 含「本週有訂貨」或「上週訂了餐包（本週要出貨）」的門市
+  const sortedStores = _sortStores(storeMaster).filter(s =>
+    allOrders.find(o => o.store_key === s.key) ||
+    (lastMap[s.key]?.data?.[BREAD_ID]?.order || 0) > 0
+  );
 
   const pages = [];
   sortedStores.forEach(store => {
-    const order = allOrders.find(o => o.store_key === store.key);
-    if (!order) return;
-    const rows = _buildShipRows(order);
+    const order     = allOrders.find(o => o.store_key === store.key) || { data: {} };
+    const lastOrder = lastMap[store.key] || { data: {} };
+    const rows = _buildShipRows(order, lastOrder);
     if (rows.every(r => !r)) return; // 全空略過
     const storeBoxes = calcOrderBoxes(order.data || {});
     pages.push({ store, rows, dateStr, storeBoxes });
@@ -1403,7 +1430,7 @@ function generateShippingOrders() {
 <style>
 @page{size:A4 portrait;margin:12mm 10mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt}
+body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt;line-height:1.1}
 .page{position:relative;width:100%;height:273mm;overflow:hidden;page-break-after:always}
 .page:last-child{page-break-after:auto}
 .page-inner{padding-bottom:24mm}
