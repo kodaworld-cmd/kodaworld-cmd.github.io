@@ -1402,8 +1402,9 @@ function _buildShipRows(order, lastOrder) {
   const rows = [...boxItems];
   if (looseItems.length > 0) rows.push(looseItems.join('/'));
 
-  // 補空列到最少 17 列（最多 16 項完整箱品項 + 1 列散裝）
-  while (rows.length < 17) rows.push('');
+  // 補空列到最少 13 列（一般門市品項數較少，避免列數過多導致跨頁；
+  // 若品項真的超過 13 列則自然增列，極端情況才會跨頁）
+  while (rows.length < 13) rows.push('');
   return rows;
 }
 
@@ -1456,34 +1457,36 @@ function generateShippingOrders() {
 
   const pagesHtml = pages.map(({ store, rows, dateStr, storeBoxes }) => `
     <div class="page">
-      <div class="page-inner">
-        <div class="title">JOYFULL中央廚房出貨單</div>
-        <table class="info-tbl">
-          <tr>
-            <td class="lbl">TO：</td>
-            <td class="sname" colspan="2">${store.fullName || store.key}<span class="region">（${store.region}）</span></td>
-            <td class="date">日期：${dateStr}</td>
-          </tr>
-          <tr>
-            <td class="lbl">地址：</td>
-            <td colspan="3" class="addr">${store.address || '（待補）'}</td>
-          </tr>
-          <tr>
-            <td class="lbl">電話：</td>
-            <td colspan="3">${store.phone || '（待補）'}</td>
-          </tr>
-        </table>
-        <table class="grid-tbl">
-          <tr class="hdr">
-            <td class="c">箱碼</td><td>產品名稱</td><td class="c">數量</td><td class="c">批號</td>
-          </tr>
-          ${rowsHtml(rows)}
-        </table>
-      </div>
-      <div class="foot-bar">
-        <span>共計箱數：${storeBoxes} 箱</span>
-        <span>司機簽收：</span>
-      </div>
+      <div class="title">JOYFULL中央廚房出貨單</div>
+      <table class="info-tbl">
+        <tr>
+          <td class="lbl">TO：</td>
+          <td class="sname" colspan="2">${store.fullName || store.key}<span class="region">（${store.region}）</span></td>
+          <td class="date">日期：${dateStr}</td>
+        </tr>
+        <tr>
+          <td class="lbl">地址：</td>
+          <td colspan="3" class="addr">${store.address || '（待補）'}</td>
+        </tr>
+        <tr>
+          <td class="lbl">電話：</td>
+          <td colspan="3">${store.phone || '（待補）'}</td>
+        </tr>
+      </table>
+      <table class="grid-tbl">
+        <tr class="hdr">
+          <td class="c">箱碼</td><td>產品名稱</td><td class="c">數量</td><td class="c">批號</td>
+        </tr>
+        ${rowsHtml(rows)}
+        <tr class="summary-row">
+          <td colspan="4">
+            <div class="summary-flex">
+              <div class="summary-boxes">共計箱數：<span class="box-num">${storeBoxes}</span> 箱</div>
+              <div class="summary-sign">司機簽收：<span class="sign-line"></span></div>
+            </div>
+          </td>
+        </tr>
+      </table>
     </div>`).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>JOYFULL出貨單_${fileDateStr}</title>
@@ -1491,10 +1494,9 @@ function generateShippingOrders() {
 @page{size:A4 portrait;margin:12mm 10mm}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt;line-height:1.1}
-.page{width:100%;height:273mm;overflow:hidden;page-break-after:always;page-break-inside:avoid;display:flex;flex-direction:column}
+.page{width:100%;page-break-after:always}
 .page:last-child{page-break-after:auto}
-.page-inner{flex:1 1 auto;min-height:0;overflow:hidden}
-.title{font-size:22pt;font-weight:bold;text-align:center;padding:4px 0;margin-bottom:3px}
+.title{font-size:20pt;font-weight:bold;text-align:center;padding:3px 0;margin-bottom:2px}
 .info-tbl{width:100%;border-collapse:collapse}
 td{padding:2px 6px;vertical-align:middle}
 .lbl{white-space:nowrap;width:60px;font-size:13pt}
@@ -1503,14 +1505,19 @@ td{padding:2px 6px;vertical-align:middle}
 .addr{font-size:12pt}
 .region{font-size:12pt;font-weight:normal;color:#444;margin-left:4px}
 .grid-tbl{width:100%;border-collapse:collapse;border:2.5px solid #000;margin-top:3px}
-.hdr td{font-size:14pt;font-weight:bold;padding:4px 6px;border-bottom:1px solid #000;text-align:center}
+.hdr td{font-size:13pt;font-weight:bold;padding:3px 6px;border-bottom:1px solid #000;text-align:center}
 .box{width:60px;border-right:1px solid #000}
 .prod{border-right:1px solid #000}
 .qty{width:60px;border-right:1px solid #000}
 .batch{width:90px}
-.has-item td{font-size:26pt;height:38px;border-bottom:1px solid #aaa}
-.empty-item td{font-size:26pt;height:38px}
-.foot-bar{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;border-top:2.5px solid #000;padding:4px 10px;font-size:34pt;font-weight:bold;background:#fff}
+.has-item td{font-size:20pt;height:30px;border-bottom:1px solid #aaa}
+.empty-item td{font-size:20pt;height:30px}
+.summary-row td{padding:6px 10px;border-top:2.5px solid #000}
+.summary-flex{display:flex;align-items:flex-end;justify-content:space-between}
+.summary-boxes{font-size:16pt;font-weight:bold;white-space:nowrap}
+.box-num{font-size:40pt;line-height:1;display:inline-block;margin:0 4px;vertical-align:middle}
+.summary-sign{display:flex;align-items:flex-end;flex:1;margin-left:24px;font-size:16pt;font-weight:bold;white-space:nowrap}
+.sign-line{flex:1;border-bottom:1.5px solid #000;height:1px;margin:0 6px 6px 10px}
 </style></head><body>${pagesHtml}</body></html>`;
 
   const win = window.open('', '_blank');
