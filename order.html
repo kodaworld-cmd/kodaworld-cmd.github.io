@@ -230,18 +230,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         📦 訂貨以<strong>箱</strong>為單位，牛排鹽、青醬等以<strong>包</strong>為單位。<br>
         ⏰ 請於週一上午 10:00 前送出，超時請在 LINE 群組告知。
       </div>
-      <!-- 只盤點切換 -->
-      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;font-size:13px;font-weight:700;color:var(--text)">
-          <div id="inventoryToggle" onclick="toggleInventoryOnly()"
-            style="width:40px;height:22px;border-radius:11px;background:#d1d5db;position:relative;cursor:pointer;flex-shrink:0;transition:background 0.2s">
-            <div id="inventoryThumb"
-              style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>
-          </div>
-          <span id="inventoryOnlyLabel">📋 只盤點，不訂貨</span>
-        </label>
-        <span id="inventoryOnlyHint" style="font-size:11px;color:var(--muted)">開啟後可只提交庫存數量</span>
-      </div>
     </div>
   </div>
   <div class="special-notice">
@@ -254,6 +242,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div style="font-size:11px;color:#3b82f6">已納入本週出貨箱數預估</div>
   </div>
   <div id="productArea"></div>
+  <!-- 只盤點切換（靠近送出按鈕，避免漏看） -->
+  <div style="margin:14px 12px;display:flex;align-items:center;gap:10px;background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;font-size:13px;font-weight:700;color:var(--text)">
+      <div id="inventoryToggle" onclick="toggleInventoryOnly()"
+        style="width:40px;height:22px;border-radius:11px;background:#d1d5db;position:relative;cursor:pointer;flex-shrink:0;transition:background 0.2s">
+        <div id="inventoryThumb"
+          style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>
+      </div>
+      <span id="inventoryOnlyLabel">📋 只盤點，不訂貨</span>
+    </label>
+    <span id="inventoryOnlyHint" style="font-size:11px;color:var(--muted)">開啟後送出時，只會記錄盤點數量，不會送出訂貨</span>
+  </div>
   <div class="page-pad"></div>
 </div>
 
@@ -389,7 +389,7 @@ const T = {
     lastWeekBreadLabel:'🍞 本週隨貨出貨餐包（上週已訂）',
     historyNotOrdered:'　未訂',
     inventoryOnlyLabel:'📋 只盤點，不訂貨',
-    inventoryOnlyHint:'開啟後可只提交庫存數量',
+    inventoryOnlyHint:'開啟後送出時，只會記錄盤點數量，不會送出訂貨',
     btnInventorySubmit:'送出盤點',
     btnUnlock:'🔓 解鎖修改',
     btnViewOnly:'查看模式',
@@ -421,7 +421,7 @@ const T = {
     summaryItems:'品目', summaryBoxes:'推定', summaryDefault:'店舗を選択してください',
     lastWeekBreadLabel:'🍞 今週同梱出荷 塩バターロール（先週発注済）',
     inventoryOnlyLabel:'📋 棚卸のみ・発注なし',
-    inventoryOnlyHint:'ONにすると在庫数のみ送信可能',
+    inventoryOnlyHint:'ONにすると在庫数のみ記録され、発注は送信されません',
     btnInventorySubmit:'棚卸データを送信',
     btnUnlock:'🔓 ロック解除して再編集',
     btnViewOnly:'閲覧のみ',
@@ -489,11 +489,11 @@ function getThisMonday() {
   const now = new Date(); const day = now.getDay();
   const mon = new Date(now); mon.setDate(now.getDate() - (day===0?6:day-1)); mon.setHours(0,0,0,0); return mon;
 }
-// 週四（含）之後自動切換到下週訂貨
+// 週五（含）之後自動切換到下週訂貨（與後台 getWeeks() 邏輯一致）
 function getOrderWeekMonday() {
   const mon = getThisMonday();
   const day = new Date().getDay(); // 0=日,1=一,...,4=四,5=五,6=六
-  if (day === 0 || day >= 4) mon.setDate(mon.getDate() + 7);
+  if (day === 0 || day >= 5) mon.setDate(mon.getDate() + 7);
   return mon;
 }
 function getThursday(mon, weeksAhead=0) { const d=new Date(mon); d.setDate(d.getDate()+weeksAhead*7+3); return d; }
@@ -824,14 +824,14 @@ function checkDeadline() {
   const badge = document.getElementById('deadlineBadge');
   // 週一 08:00–09:59：倒數提醒（紅色閃爍）
   if (day===1 && hour>=8 && hour<10)      { badge.textContent=t('deadlineUrgent'); badge.classList.add('urgent'); badge.style.background=''; }
-  // 週一 10:00 後 ＋ 週二 ＋ 週三：已截止（紅色常亮）
-  else if ((day===1 && hour>=10) || day===2 || day===3) {
+  // 週一 10:00 後 ＋ 週二、三、四：本週已截止（紅色常亮，與後台週五才切換下週一致）
+  else if ((day===1 && hour>=10) || day===2 || day===3 || day===4) {
     badge.textContent=t('deadlinePast'); badge.classList.add('urgent');
     badge.style.animation='none'; // 不閃，常亮紅
   }
   // 週一 00:00–07:59：今日截止提醒（橙色）
   else if (day===1) { badge.textContent=t('deadlineToday'); badge.classList.remove('urgent'); badge.style.background='#f97316'; badge.style.color='#fff'; }
-  // 週四以後（切換下週）：正常顯示
+  // 週五以後（切換下週）：正常顯示
   else { badge.textContent=t('deadlineNormal'); badge.classList.remove('urgent'); badge.style.background=''; badge.style.color=''; }
 }
 
@@ -931,7 +931,9 @@ function renderProducts() {
       const displayName = currentLang === 'ja' && PRODUCT_NAMES_JA[p.id] ? PRODUCT_NAMES_JA[p.id] : p.name;
       const cardClass = `product-card${isSpecial?' special-item':''}${hasOrder?' has-order':''}`;
       const plusClass = isSpecial ? 'qty-btn plus special-plus' : 'qty-btn plus';
-      const disabled = (isSubmitted || inventoryOnly) ? 'disabled' : '';
+      // 盤點輸入只在「已送出」後鎖定；訂貨輸入在「只盤點」模式下也要鎖定
+      const stockDisabled = isSubmitted ? 'disabled' : '';
+      const orderDisabled = (isSubmitted || inventoryOnly) ? 'disabled' : '';
       html += `
       <div class="${cardClass}" id="card_${p.id}">
         <div class="prod-row">
@@ -942,15 +944,15 @@ function renderProducts() {
           <div class="input-group">
             <div class="input-label-sm">${t('tagStockUnit')}${p.stockUnit||p.unit}</div>
             <input class="stock-input" type="number" inputmode="numeric" min="0" id="stock_${p.id}"
-              value="${d.stock!==''?d.stock:''}" placeholder="" onchange="setStock(${p.id},this.value)" ${disabled}>
+              value="${d.stock!==''?d.stock:''}" placeholder="" onchange="setStock(${p.id},this.value)" ${stockDisabled}>
           </div>
           <div class="input-group">
             <div class="input-label-sm">${t('tagOrderUnit')}${p.unit}</div>
             <div class="qty-wrap">
-              <button class="qty-btn minus" ontouchstart="" onclick="changeOrder(${p.id},-1)" ${disabled}>−</button>
+              <button class="qty-btn minus" ontouchstart="" onclick="changeOrder(${p.id},-1)" ${orderDisabled}>−</button>
               <input class="qty-input" type="number" min="0" id="order_${p.id}"
-                value="${d.order||0}" onchange="setOrder(${p.id},this.value)" ${disabled}>
-              <button class="${plusClass}" ontouchstart="" onclick="changeOrder(${p.id},1)" ${disabled}>+</button>
+                value="${d.order||0}" onchange="setOrder(${p.id},this.value)" ${orderDisabled}>
+              <button class="${plusClass}" ontouchstart="" onclick="changeOrder(${p.id},1)" ${orderDisabled}>+</button>
             </div>
           </div>
         </div>

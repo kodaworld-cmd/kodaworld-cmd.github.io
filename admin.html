@@ -212,6 +212,7 @@ tr:hover td { background: #f8fafc; }
       <div class="section-header">
         <h3>🏪 各門市訂貨明細</h3>
         <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-outline btn-sm" id="detailModeBtn" onclick="toggleDetailViewMode()">🔄 切換為盤點數量</button>
           <span style="font-size:11px;color:var(--muted)">列印為 A4 橫式</span>
           <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 列印</button>
           <button class="btn btn-success btn-sm" onclick="generateShippingOrders()">📄 生成出貨單</button>
@@ -586,6 +587,7 @@ let cachedStoreOrder   = [];  // 門市排序（store key 陣列）
 let cachedStoreOverrides = {}; // { store_key: { address, phone, fullName, region } }
 let allOrders = [];
 let lastWeekOrders = [];
+let detailViewMode = 'order'; // 'order'=訂貨數量 / 'stock'=盤點數量
 
 const MIN_BOXES_DEFAULT = 4;
 const MIN_BOXES_INIT = { '新店碧潭':6, '新店家樂福':6, '宜蘭店':6, '南投埔里':6, '南投家樂福':6 };
@@ -871,6 +873,14 @@ function renderProdGrid() {
 // ========================
 // Detail Table
 // ========================
+// 切換「各門市訂貨明細」表格顯示：訂貨數量 ↔ 盤點數量
+function toggleDetailViewMode() {
+  detailViewMode = detailViewMode === 'order' ? 'stock' : 'order';
+  const btn = document.getElementById('detailModeBtn');
+  if (btn) btn.textContent = detailViewMode === 'stock' ? '🔄 切換為訂貨數量' : '🔄 切換為盤點數量';
+  renderDetailTable();
+}
+
 function renderDetailTable() {
   if (!allOrders.length) {
     document.getElementById('detailHead').innerHTML='';
@@ -881,21 +891,29 @@ function renderDetailTable() {
   const wf=document.getElementById('weekFilter');
   const weekLabel=wf.options[wf.selectedIndex].text;
   const now=new Date().toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-  document.getElementById('printHeader').textContent=`手作訂貨彙整表　${weekLabel}　列印：${now}`;
+  const isStockMode = detailViewMode==='stock';
+  document.getElementById('printHeader').textContent=`${isStockMode?'手作盤點彙整表':'手作訂貨彙整表'}　${weekLabel}　列印：${now}`;
 
   const BREAD_ID=1367;
   const breadStyle=' style="color:var(--special);background:#faf5ff"';
+  // 餐包雙欄識別徽章：藍＝本週即將出貨／橙＝下週才出貨，避免被忽略或誤讀
+  const shipBadge=' style="display:inline-block;margin-top:3px;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:800;background:#2563eb;color:#fff;white-space:nowrap"';
+  const nextBadge=' style="display:inline-block;margin-top:3px;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:800;background:#f97316;color:#fff;white-space:nowrap"';
 
   document.getElementById('detailHead').innerHTML = `<tr>
     <th>門市</th>
     ${PRODUCTS.map(p=>{
       if (p.id===BREAD_ID) {
-        return `<th class="c" title="${p.name}（上週訂貨，本週出貨）"${breadStyle}>${p.short}<br><span style="font-size:9px;font-weight:400;color:#9ca3af">上週訂→本週出</span></th>`
-             + `<th class="c" title="${p.name}（本週訂貨，下週出貨）"${breadStyle}>${p.short}<br><span style="font-size:9px;font-weight:400;color:#9ca3af">本週訂→下週出</span></th>`;
+        if (isStockMode) {
+          return `<th class="c" title="${p.name}（上週盤點數量）"${breadStyle}>${p.short}<br><span${shipBadge}>📋上週盤點</span></th>`
+               + `<th class="c" title="${p.name}（本週盤點數量）"${breadStyle}>${p.short}<br><span${nextBadge}>📋本週盤點</span></th>`;
+        }
+        return `<th class="c" title="${p.name}（上週訂貨，本週出貨）"${breadStyle}>${p.short}<br><span${shipBadge}>🚚本週出貨</span></th>`
+             + `<th class="c" title="${p.name}（本週訂貨，下週出貨）"${breadStyle}>${p.short}<br><span${nextBadge}>📅下週出貨</span></th>`;
       }
       return `<th class="c" title="${p.name}">${p.short||p.name}</th>`;
     }).join('')}
-    <th class="c">小計</th><th>訂貨人</th><th>送出</th><th class="c">操作</th>
+    <th class="c">${isStockMode?'—':'小計'}</th><th>訂貨人</th><th>送出</th><th class="c">操作</th>
   </tr>`;
 
   const orderMap={}; allOrders.forEach(o=>{orderMap[o.store_key]=o;});
@@ -908,10 +926,21 @@ function renderDetailTable() {
   const weekMonday = new Date(wf2.value + 'T00:00:00');
   const weekDeadline = new Date(weekMonday); weekDeadline.setHours(10, 0, 0, 0);
 
+  // 盤點數量是否「有填寫」（區分未填 '' 與填 0）
+  const hasStock = v => v!==undefined && v!==null && v!=='';
+
   const rows=submitted.map(storeKey => {
     const o=orderMap[storeKey]; const oLast=lastMap[storeKey]; const data=o?.data||{};
     const cells=PRODUCTS.map(p=>{
       if (p.id===BREAD_ID) {
+        if (isStockMode) {
+          const sLast=oLast?.data?.[BREAD_ID]?.stock;
+          const sThis=data[BREAD_ID]?.stock;
+          const styleLast=hasStock(sLast)?' style="color:var(--special);font-weight:800"':'';
+          const styleThis=hasStock(sThis)?' style="color:var(--special);font-weight:800"':'';
+          return `<td class="qc ${hasStock(sLast)?'on':'off'}"${styleLast}>${hasStock(sLast)?sLast:'—'}</td>`
+               + `<td class="qc ${hasStock(sThis)?'on':'off'}"${styleThis}>${hasStock(sThis)?sThis:'—'}</td>`;
+        }
         const vLast=oLast?.data?.[BREAD_ID]?.order||0;
         const vThis=data[BREAD_ID]?.order||0;
         const styleLast=vLast>0?' style="color:var(--special);font-weight:800"':'';
@@ -919,11 +948,16 @@ function renderDetailTable() {
         return `<td class="qc ${vLast>0?'on':'off'}"${styleLast}>${vLast>0?vLast:'—'}</td>`
              + `<td class="qc ${vThis>0?'on':'off'}"${styleThis}>${vThis>0?vThis:'—'}</td>`;
       }
+      if (isStockMode) {
+        const s=data[p.id]?.stock;
+        return `<td class="qc ${hasStock(s)?'on':'off'}">${hasStock(s)?s:'—'}</td>`;
+      }
       const v=data[p.id]?.order||0;
       return `<td class="qc ${v>0?'on':'off'}">${v>0?v:'—'}</td>`;
     });
-    // 箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）
+    // 箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）（盤點模式不適用）
     const rowBoxes = (o ? calcOrderBoxes(data) : 0) + calcBreadBoxes(oLast?.data?.[BREAD_ID]?.order || 0);
+    const rowBoxesCell = isStockMode ? '—' : `${rowBoxes} 箱`;
 
     // 判斷是否截止後修改
     const submittedAt = o?.submitted_at ? new Date(o.submitted_at) : null;
@@ -941,22 +975,40 @@ function renderDetailTable() {
     const editBtn = orderId ? `<button onclick="editOrder('${storeKey}','${orderId}')" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;margin-right:3px">✏️</button>` : '';
     const delBtn  = orderId ? `<button onclick="deleteOrder('${storeKey}','${orderId}')" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer">🗑</button>` : '';
     const rowStyle = isLateEdit ? ' style="background:#fffbeb"' : '';
-    return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowBoxes} 箱</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
+    return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowBoxesCell}</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
   });
 
   const colTotalsHtml=PRODUCTS.map(p=>{
     if (p.id===BREAD_ID) {
+      if (isStockMode) {
+        const sumStock = orders => orders.reduce((s,o)=>{
+          const v=o.data?.[BREAD_ID]?.stock;
+          return s + (hasStock(v) ? Number(v) : 0);
+        },0);
+        const tLast=sumStock(lastWeekOrders);
+        const tThis=sumStock(allOrders);
+        return `<td class="qc ${tLast>0?'on':'off'}"${tLast>0?' style="color:var(--special)"':''}>${tLast>0?`<strong>${tLast}</strong>`:'—'}</td>`
+             + `<td class="qc ${tThis>0?'on':'off'}"${tThis>0?' style="color:var(--special)"':''}>${tThis>0?`<strong>${tThis}</strong>`:'—'}</td>`;
+      }
       const tLast=lastWeekOrders.reduce((s,o)=>s+(o.data?.[BREAD_ID]?.order||0),0);
       const tThis=allOrders.reduce((s,o)=>s+(o.data?.[BREAD_ID]?.order||0),0);
       return `<td class="qc ${tLast>0?'on':'off'}"${tLast>0?' style="color:var(--special)"':''}>${tLast>0?`<strong>${tLast}</strong>`:'—'}</td>`
            + `<td class="qc ${tThis>0?'on':'off'}"${tThis>0?' style="color:var(--special)"':''}>${tThis>0?`<strong>${tThis}</strong>`:'—'}</td>`;
+    }
+    if (isStockMode) {
+      const t=allOrders.reduce((s,o)=>{
+        const v=o.data?.[p.id]?.stock;
+        return s + (hasStock(v) ? Number(v) : 0);
+      },0);
+      return `<td class="qc ${t>0?'on':'off'}">${t>0?`<strong>${t}</strong>`:'—'}</td>`;
     }
     const t=allOrders.reduce((s,o)=>s+(o.data?.[p.id]?.order||0),0);
     return `<td class="qc ${t>0?'on':'off'}">${t>0?`<strong>${t}</strong>`:'—'}</td>`;
   }).join('');
   const grandBoxes = allOrders.reduce((s,o)=>s+calcOrderBoxes(o.data||{}),0)
     + lastWeekOrders.reduce((s,o)=>s+calcBreadBoxes(o.data?.[BREAD_ID]?.order||0),0);
-  const totRow=`<tr class="total-row"><td>合計</td>${colTotalsHtml}<td class="grand">${grandBoxes} 箱</td><td></td><td></td></tr>`;
+  const grandBoxesCell = isStockMode ? '—' : `${grandBoxes} 箱`;
+  const totRow=`<tr class="total-row"><td>合計</td>${colTotalsHtml}<td class="grand">${grandBoxesCell}</td><td></td><td></td></tr>`;
   document.getElementById('detailBody').innerHTML=rows.join('')+totRow;
 }
 
