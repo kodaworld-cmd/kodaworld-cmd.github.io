@@ -376,6 +376,7 @@ const T = {
     infoText:'訂貨以<strong>箱</strong>為單位，牛排鹽、青醬等以<strong>包</strong>為單位。<br>⏰ 請於週一上午 10:00 前送出。',
     breadNotice:'🍞 <strong>海鹽奶油餐包</strong>為代訂商品：<strong>本週一下單 → 下週四配送</strong>。',
     submittedBanner:'✅ 本週已送出訂單，如需修改請聯絡總部',
+    submittedBannerEditable:'✅ 本週已送出訂單，截止前可按下方「解鎖修改」自行調整',
     colStock:'盤點數量', colOrder:'訂貨數量',
     catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代訂商品（下週四配送）',
     tagSpecial:'代訂', tagUnit:'單位：', tagStockUnit:'盤點：', tagOrderUnit:'訂貨：',
@@ -408,6 +409,7 @@ const T = {
     infoText:'発注単位は主に<strong>箱</strong>です。ステーキソルト等は<strong>袋</strong>単位です。<br>⏰ 月曜10:00までにご送信ください。',
     breadNotice:'🍞 <strong>塩バターロール</strong>は代理注文商品：<strong>今週月曜発注 → 来週木曜配送</strong>。1週間前の発注が必要です！',
     submittedBanner:'✅ 今週の発注を送信済みです。変更はご連絡ください。',
+    submittedBannerEditable:'✅ 今週の発注を送信済みです。締め切り前なら下の「ロック解除」で編集できます',
     colStock:'在庫数量', colOrder:'発注数量',
     catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代理注文商品（来週木曜配送）',
     tagSpecial:'代理注文', tagUnit:'単位：', tagStockUnit:'在庫：', tagOrderUnit:'発注：',
@@ -465,7 +467,7 @@ function applyLang() {
   document.querySelector('.info-row').innerHTML = l.infoText;
   document.querySelector('.special-notice').innerHTML = l.breadNotice;
   const banner = document.getElementById('submittedBanner');
-  if (banner) banner.textContent = l.submittedBanner;
+  if (banner) banner.textContent = canUnlockCurrent ? l.submittedBannerEditable : l.submittedBanner;
   const btn = document.getElementById('submitBtn');
   if (btn && !isSubmitted) btn.textContent = l.btnSubmit;
   // 只盤點切換標籤
@@ -508,6 +510,7 @@ let currentStore = '';
 let currentWeek = '';
 let orderData = {};
 let isSubmitted = false;
+let canUnlockCurrent = false; // 目前帳號是否可解鎖修改本週訂單（影響 submittedBanner 文字）
 let lastWeekBreadQty = 0;    // 上週餐包訂購量（本週隨貨出貨）
 let minBoxesSettings = {};   // { store_key: 最低箱數 }
 let inventoryOnly = false;   // 只盤點模式
@@ -860,14 +863,22 @@ async function loadOrderState() {
   // 上週餐包量（本週隨貨出貨）
   lastWeekBreadQty = lastData?.data?.[1367]?.order || 0;
 
-  const canUnlock = ['admin','manager'].includes(currentUserRole);
+  // 本週截止時間（週一 10:00）：截止前店家可自行解鎖修改，截止後僅 admin/manager 可解鎖
+  const weekMonday = new Date(currentWeek + 'T00:00:00');
+  const weekDeadline = new Date(weekMonday); weekDeadline.setHours(10, 0, 0, 0);
+  const beforeDeadline = new Date() < weekDeadline;
+
+  const canUnlock = ['admin','manager'].includes(currentUserRole) || (currentUserRole==='store' && beforeDeadline);
   const canSubmit = ['admin','manager','store'].includes(currentUserRole);
+  canUnlockCurrent = canUnlock;
 
   if (data) {
     orderData = data.data || {};
     isSubmitted = true;
-    document.getElementById('submittedBanner').style.display = 'block';
-    // manager/admin 可看到解鎖按鈕；viewer 只能看
+    const banner = document.getElementById('submittedBanner');
+    banner.style.display = 'block';
+    banner.textContent = canUnlock ? t('submittedBannerEditable') : t('submittedBanner');
+    // 截止前店家或 manager/admin 可看到解鎖按鈕；截止後 viewer/store 只能看
     if (canUnlock) {
       btn.textContent = '🔓 解鎖修改'; btn.className = 'submit-btn'; btn.disabled = false;
       btn.onclick = () => unlockOrder();
