@@ -153,10 +153,13 @@ tr:hover td { background: #f8fafc; }
 
 <div class="main">
 
-  <!-- 🍞 餐包週期追蹤（永遠顯示） -->
+  <!-- 🍞 餐包週期追蹤（可摺疊） -->
   <div style="margin-bottom:16px">
-    <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:0.5px;margin-bottom:8px">🍞 餐包週期追蹤</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:8px;padding:6px 10px;background:#f1f5f9;border-radius:8px" onclick="toggleBreadPanel()">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:0.5px">🍞 餐包週期追蹤</div>
+      <div id="breadPanelToggleBtn" style="font-size:11px;font-weight:700;color:var(--primary)">▲ 收合</div>
+    </div>
+    <div id="breadPanelContent" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
 
       <!-- 卡1：本週出貨（上週門市訂的） -->
       <div style="background:#eff6ff;border:2px solid #2563eb;border-radius:12px;padding:16px;text-align:center">
@@ -482,7 +485,7 @@ tr:hover td { background: #f8fafc; }
     <div class="stats-row" id="issueStatsRow"></div>
     <div class="section-card">
       <div class="section-header">
-        <h3>🚨 異常通報案件</h3>
+        <h3 id="p9CaseTitleEl">🚨 異常通報案件</h3>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <select id="issueFilterStore" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px"><option value="">全部門市</option></select>
           <select id="issueFilterStatus" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px">
@@ -502,13 +505,13 @@ tr:hover td { background: #f8fafc; }
             <option value="lastweek">上週</option>
             <option value="4weeks">近4週</option>
           </select>
-          <button class="btn btn-outline btn-sm" onclick="loadIssues()">🔄 重新整理</button>
+          <button id="p9RefreshBtn" class="btn btn-outline btn-sm" onclick="loadIssues()">🔄 重新整理</button>
         </div>
       </div>
       <div class="table-wrap">
         <table>
           <thead><tr>
-            <th>時間</th><th>門市</th><th>品項</th><th>問題類型</th><th class="c">數量</th><th>同批剩餘</th><th>批號／效期</th><th>提報人</th><th class="c">狀態</th><th class="c">操作</th>
+            <th id="p9Th1">時間</th><th id="p9Th2">門市</th><th id="p9Th3">品項</th><th id="p9Th4">問題類型</th><th class="c" id="p9Th5">數量</th><th id="p9Th6">同批剩餘</th><th id="p9Th7">批號／效期</th><th id="p9Th8">提報人</th><th class="c" id="p9Th9">狀態</th><th class="c" id="p9Th10">操作</th>
           </tr></thead>
           <tbody id="issueListBody"><tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">載入中…</td></tr></tbody>
         </table>
@@ -516,9 +519,9 @@ tr:hover td { background: #f8fafc; }
     </div>
 
     <div class="section-card">
-      <div class="section-header"><h3>📊 品項異常彙總（依目前篩選範圍）</h3><span style="font-size:12px;color:var(--muted)" id="issueSummaryRangeLabel"></span></div>
+      <div class="section-header"><h3 id="p9SummaryTitleEl">📊 品項異常彙總（依目前篩選範圍）</h3><span style="font-size:12px;color:var(--muted)" id="issueSummaryRangeLabel"></span></div>
       <div class="table-wrap">
-        <table><thead><tr><th>品項</th><th>問題類型</th><th class="c">件數</th><th>涉及門市</th></tr></thead><tbody id="issueSummaryBody"></tbody></table>
+        <table><thead><tr><th id="p9STh1">品項</th><th id="p9STh2">問題類型</th><th class="c" id="p9STh3">件數</th><th id="p9STh4">涉及門市</th></tr></thead><tbody id="issueSummaryBody"></tbody></table>
       </div>
     </div>
   </div>
@@ -746,12 +749,29 @@ async function doAdminLogin() {
   currentAdminUserId = data.user.id;
   document.getElementById('adminLoginScreen').style.display = 'none';
   document.getElementById('adminApp').style.display = 'block';
+  initBreadPanelState();
   await startAdmin();
 }
 
 async function doAdminLogout() {
   await sb.auth.signOut();
   showAdminLogin();
+}
+
+// 🍞 餐包週期追蹤面板摺疊/展開
+function toggleBreadPanel(forceCollapsed) {
+  const content = document.getElementById('breadPanelContent');
+  const btn = document.getElementById('breadPanelToggleBtn');
+  if (!content || !btn) return;
+  const collapsed = (forceCollapsed !== undefined) ? forceCollapsed : (content.style.display !== 'none');
+  content.style.display = collapsed ? 'none' : 'grid';
+  btn.textContent = collapsed ? '▼ 展開' : '▲ 收合';
+  try { localStorage.setItem('breadPanelCollapsed', collapsed ? '1' : '0'); } catch(e) {}
+}
+function initBreadPanelState() {
+  let collapsed = false;
+  try { collapsed = localStorage.getItem('breadPanelCollapsed') === '1'; } catch(e) {}
+  toggleBreadPanel(collapsed);
 }
 
 // ========================
@@ -783,6 +803,7 @@ async function init() {
   currentAdminUserId = session.user.id;
   document.getElementById('adminLoginScreen').style.display = 'none';
   document.getElementById('adminApp').style.display = 'block';
+  initBreadPanelState();
   await startAdmin();
 }
 
@@ -2431,6 +2452,26 @@ const T_ADMIN = {
     cleanupNote:'清除後資料無法復原，建議先匯出全部歷史備份。',
     roleAdmin:'管理者', roleManager:'區經理', roleViewer:'查看', roleStore:'門市',
     catFrozen:'冷凍', catAmbient:'常温', catSpecial:'代訂',
+    tab9:'🚨 異常處理',
+    p9CaseTitle:'🚨 異常通報案件',
+    p9FilterAllStore:'全部門市', p9FilterAllStatus:'全部狀態', p9FilterAllType:'全部類型', p9FilterAllRange:'全部時間',
+    p9RangeThisWeek:'本週', p9RangeLastWeek:'上週', p9Range4Weeks:'近4週',
+    p9Refresh:'🔄 重新整理',
+    p9ColTime:'時間', p9ColStore:'門市', p9ColItem:'品項', p9ColType:'問題類型', p9ColQty:'數量',
+    p9ColRemain:'同批剩餘', p9ColBatch:'批號／效期', p9ColReporter:'提報人', p9ColStatus:'狀態', p9ColOp:'操作',
+    p9Loading:'載入中…', p9LoadError:'載入失敗：', p9NoMatch:'沒有符合條件的案件', p9Process:'處理',
+    p9SummaryTitle:'📊 品項異常彙總（依目前篩選範圍）',
+    p9ColSumItem:'品項', p9ColSumType:'問題類型', p9ColSumCount:'件數', p9ColSumStores:'涉及門市', p9NoData:'無資料',
+    p9StatTotal:'案件總數', p9StatPending:'待處理', p9StatProcessing:'處理中', p9StatClosed:'已結案',
+    p9BatchLabel:'批號',
+    p9ModalCasePrefix:'🚨 案件 ',
+    p9ModalStore:'門市：', p9ModalTime:'　時間：', p9ModalItem:'品項：', p9ModalType:'　類型：',
+    p9ModalQty:'數量：', p9ModalRemain:'　同批剩餘庫存：',
+    p9ModalProdDate:'生產日期：', p9ModalBatch:'　批號：', p9ModalReporter:'　提報人：',
+    p9ModalFeedback:'📋 央廚處理回饋', p9ModalStatusLbl:'案件狀態', p9ModalRespLbl:'責任歸屬',
+    p9ModalResolutionLbl:'處理方式', p9ModalNotesLbl:'處理情形說明（門市可查看）',
+    p9ModalSave:'💾 儲存處理結果', p9ModalCancel:'取消', p9NotFilled:'（未填）',
+    p9SaveSuccess:'✅ 已更新案件狀態', p9SaveError:'❌ 儲存失敗：',
   },
   ja: {
     title:'📊 手作出荷管理システム', subtitle:'中央キッチン / 本部',
@@ -2494,6 +2535,26 @@ const T_ADMIN = {
     cleanupNote:'削除後は元に戻せません。事前に全履歴を出力してバックアップしてください。',
     roleAdmin:'管理者', roleManager:'エリアマネージャー', roleViewer:'閲覧', roleStore:'店舗',
     catFrozen:'冷凍', catAmbient:'常温', catSpecial:'代理注文',
+    tab9:'🚨 異常対応',
+    p9CaseTitle:'🚨 異常報告一覧',
+    p9FilterAllStore:'全店舗', p9FilterAllStatus:'全状態', p9FilterAllType:'全タイプ', p9FilterAllRange:'全期間',
+    p9RangeThisWeek:'今週', p9RangeLastWeek:'先週', p9Range4Weeks:'直近4週',
+    p9Refresh:'🔄 更新',
+    p9ColTime:'時刻', p9ColStore:'店舗', p9ColItem:'商品', p9ColType:'問題タイプ', p9ColQty:'数量',
+    p9ColRemain:'同ロット残', p9ColBatch:'ロット／期限', p9ColReporter:'報告者', p9ColStatus:'状態', p9ColOp:'操作',
+    p9Loading:'読み込み中…', p9LoadError:'読み込み失敗：', p9NoMatch:'該当する案件はありません', p9Process:'処理',
+    p9SummaryTitle:'📊 商品別異常集計（現在の絞り込み範囲）',
+    p9ColSumItem:'商品', p9ColSumType:'問題タイプ', p9ColSumCount:'件数', p9ColSumStores:'対象店舗', p9NoData:'データなし',
+    p9StatTotal:'案件総数', p9StatPending:'未対応', p9StatProcessing:'対応中', p9StatClosed:'完了',
+    p9BatchLabel:'ロット',
+    p9ModalCasePrefix:'🚨 案件 ',
+    p9ModalStore:'店舗：', p9ModalTime:'　時刻：', p9ModalItem:'商品：', p9ModalType:'　タイプ：',
+    p9ModalQty:'数量：', p9ModalRemain:'　同ロット残在庫：',
+    p9ModalProdDate:'製造日：', p9ModalBatch:'　ロット番号：', p9ModalReporter:'　報告者：',
+    p9ModalFeedback:'📋 本部対応記録', p9ModalStatusLbl:'案件状態', p9ModalRespLbl:'責任所在',
+    p9ModalResolutionLbl:'対応方法', p9ModalNotesLbl:'対応状況の説明（店舗閲覧可）',
+    p9ModalSave:'💾 対応結果を保存', p9ModalCancel:'キャンセル', p9NotFilled:'（未入力）',
+    p9SaveSuccess:'✅ 案件状態を更新しました', p9SaveError:'❌ 保存失敗：',
   }
 };
 
@@ -2506,12 +2567,21 @@ function applyAdminLang() {
   s('btnRefresh','btnRefresh'); s('btnExportWeek','btnExportWeek');
   s('btnExportAll','btnExportAll'); s('btnClearTest','btnClearTest');
   s('statLblSubmitted','statSubmitted'); s('statLblPending','statPending'); s('statLblBoxes','statBoxes');
-  for(let i=1;i<=8;i++){const el=document.getElementById(`t${i}`);if(el)el.textContent=ta(`tab${i}`);}
+  for(let i=1;i<=9;i++){const el=document.getElementById(`t${i}`);if(el)el.textContent=ta(`tab${i}`);}
+  // P9 異常處理 靜態文字
+  s('p9CaseTitleEl','p9CaseTitle'); s('p9RefreshBtn','p9Refresh');
+  s('p9Th1','p9ColTime'); s('p9Th2','p9ColStore'); s('p9Th3','p9ColItem'); s('p9Th4','p9ColType');
+  s('p9Th5','p9ColQty'); s('p9Th6','p9ColRemain'); s('p9Th7','p9ColBatch'); s('p9Th8','p9ColReporter');
+  s('p9Th9','p9ColStatus'); s('p9Th10','p9ColOp');
+  s('p9SummaryTitleEl','p9SummaryTitle');
+  s('p9STh1','p9ColSumItem'); s('p9STh2','p9ColSumType'); s('p9STh3','p9ColSumCount'); s('p9STh4','p9ColSumStores');
+  populateIssueFilterOptions();
   // Re-render dynamic content with new language
   if(allOrders.length||lastWeekOrders.length) renderAll();
-  const activeTab = [1,2,3,4,5,6,7,8].find(i=>document.getElementById(`t${i}`)?.classList.contains('active'))||1;
+  const activeTab = [1,2,3,4,5,6,7,8,9].find(i=>document.getElementById(`t${i}`)?.classList.contains('active'))||1;
   if(activeTab===7) loadUserList();
   if(activeTab===8) renderProductList();
+  if(activeTab===9 && allIssues.length) renderIssuesPanel();
 }
 
 // 角色標籤（使用翻譯）
@@ -2555,20 +2625,60 @@ function showToast(msg) {
 let allIssues = [];
 const ISSUE_RESPONSIBILITY_OPTIONS = ['原料供應商','央廚-生產','央廚-包裝','物流配送','門市操作','其他'];
 const ISSUE_RESOLUTION_OPTIONS = ['原門市報廢','退回央廚','換貨補寄','其他'];
+const ISSUE_TYPE_OPTIONS = ['異物','品質','保存期限','數量短缺','包裝','其他'];
+const ISSUE_STATUS_OPTIONS = ['待處理','處理中','已結案'];
+
+// 中→日 顯示對照（資料庫值維持中文，僅顯示時依語言轉換）
+const ISSUE_TYPE_JA = {'異物':'異物混入','品質':'品質（変質・食感・カビ等）','保存期限':'賞味期限','數量短缺':'数量不足','包裝':'梱包（破損・封緘不良）','其他':'その他'};
+const ISSUE_STATUS_JA = {'待處理':'未対応','處理中':'対応中','已結案':'完了'};
+const ISSUE_RESP_JA = {'原料供應商':'原材料サプライヤー','央廚-生產':'セントラルキッチン-製造','央廚-包裝':'セントラルキッチン-梱包','物流配送':'配送','門市操作':'店舗オペレーション','其他':'その他'};
+const ISSUE_RESO_JA = {'原門市報廢':'店舗で廃棄','退回央廚':'セントラルキッチンへ返品','換貨補寄':'交換・再送','其他':'その他'};
+
+function issLabel(zh, map) { return adminLang === 'ja' ? (map[zh] || zh) : zh; }
+
+// 重新產生「異常通報」篩選器選項文字（依語言）
+function populateIssueFilterOptions() {
+  const statusSel = document.getElementById('issueFilterStatus');
+  if (statusSel) {
+    const cur = statusSel.value;
+    statusSel.innerHTML = `<option value="">${ta('p9FilterAllStatus')}</option>` +
+      ISSUE_STATUS_OPTIONS.map(s=>`<option value="${s}">${issLabel(s, ISSUE_STATUS_JA)}</option>`).join('');
+    statusSel.value = cur;
+  }
+  const typeSel = document.getElementById('issueFilterType');
+  if (typeSel) {
+    const cur = typeSel.value;
+    typeSel.innerHTML = `<option value="">${ta('p9FilterAllType')}</option>` +
+      ISSUE_TYPE_OPTIONS.map(s=>`<option value="${s}">${issLabel(s, ISSUE_TYPE_JA)}</option>`).join('');
+    typeSel.value = cur;
+  }
+  const rangeSel = document.getElementById('issueFilterRange');
+  if (rangeSel) {
+    const cur = rangeSel.value;
+    rangeSel.innerHTML = `<option value="all">${ta('p9FilterAllRange')}</option>` +
+      `<option value="thisweek">${ta('p9RangeThisWeek')}</option>` +
+      `<option value="lastweek">${ta('p9RangeLastWeek')}</option>` +
+      `<option value="4weeks">${ta('p9Range4Weeks')}</option>`;
+    rangeSel.value = cur;
+  }
+  const storeSel = document.getElementById('issueFilterStore');
+  if (storeSel && storeSel.options[0]) storeSel.options[0].textContent = ta('p9FilterAllStore');
+}
 
 async function loadIssues() {
   const tbody = document.getElementById('issueListBody');
-  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">載入中…</td></tr>';
+  tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">${ta('p9Loading')}</td></tr>`;
   const { data, error } = await sb.from('product_issues').select('*').order('created_at', { ascending:false });
-  if (error) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">載入失敗：'+error.message+'</td></tr>'; return; }
+  if (error) { tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">${ta('p9LoadError')}${error.message}</td></tr>`; return; }
   allIssues = data || [];
 
   const sel = document.getElementById('issueFilterStore');
   const cur = sel.value;
   const stores = getEffectiveStoreMaster();
-  sel.innerHTML = '<option value="">全部門市</option>' + stores.map(s=>`<option value="${s.key}">${s.fullName}</option>`).join('');
+  sel.innerHTML = `<option value="">${ta('p9FilterAllStore')}</option>` + stores.map(s=>`<option value="${s.key}">${s.fullName}</option>`).join('');
   sel.value = cur;
 
+  populateIssueFilterOptions();
   renderIssuesPanel();
 }
 
@@ -2604,10 +2714,10 @@ function renderIssuesPanel() {
   const processing = filtered.filter(i=>i.status==='處理中').length;
   const closed     = filtered.filter(i=>i.status==='已結案').length;
   document.getElementById('issueStatsRow').innerHTML = `
-    <div class="stat-card"><div class="stat-label">案件總數</div><div class="stat-value blue">${filtered.length}</div></div>
-    <div class="stat-card"><div class="stat-label">待處理</div><div class="stat-value orange">${pending}</div></div>
-    <div class="stat-card"><div class="stat-label">處理中</div><div class="stat-value blue">${processing}</div></div>
-    <div class="stat-card"><div class="stat-label">已結案</div><div class="stat-value green">${closed}</div></div>
+    <div class="stat-card"><div class="stat-label">${ta('p9StatTotal')}</div><div class="stat-value blue">${filtered.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${ta('p9StatPending')}</div><div class="stat-value orange">${pending}</div></div>
+    <div class="stat-card"><div class="stat-label">${ta('p9StatProcessing')}</div><div class="stat-value blue">${processing}</div></div>
+    <div class="stat-card"><div class="stat-label">${ta('p9StatClosed')}</div><div class="stat-value green">${closed}</div></div>
   `;
 
   // 案件列表
@@ -2615,7 +2725,7 @@ function renderIssuesPanel() {
   const storeMaster = getEffectiveStoreMaster();
   const storeName = key => (storeMaster.find(s=>s.key===key)||{}).fullName || key;
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">沒有符合條件的案件</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">${ta('p9NoMatch')}</td></tr>`;
   } else {
     tbody.innerHTML = filtered.map(it => {
       const d = new Date(it.created_at);
@@ -2624,25 +2734,25 @@ function renderIssuesPanel() {
       const qty    = it.quantity_affected   != null ? `${it.quantity_affected}${it.quantity_unit||''}`   : '—';
       const remain = it.remaining_stock_qty != null ? `${it.remaining_stock_qty}${it.quantity_unit||''}` : '—';
       const batchStr = (it.production_date || it.batch_no)
-        ? `${it.production_date||'—'} ${it.batch_no?('批號'+it.batch_no):''}`.trim()
+        ? `${it.production_date||'—'} ${it.batch_no?(ta('p9BatchLabel')+it.batch_no):''}`.trim()
         : '—';
       return `<tr>
         <td>${timeStr}</td>
         <td>${storeName(it.store_key)}</td>
         <td>${it.product_name}</td>
-        <td><span class="issue-type-tag">${it.issue_type}</span></td>
+        <td><span class="issue-type-tag">${issLabel(it.issue_type, ISSUE_TYPE_JA)}</span></td>
         <td class="c">${qty}</td>
         <td class="c">${remain}</td>
         <td>${batchStr}</td>
         <td>${it.reporter_name || '—'}</td>
-        <td class="c"><span class="issue-status ${statusCls}" onclick="openIssueProcessModal('${it.id}')">${it.status}</span></td>
-        <td class="c"><button class="btn btn-outline btn-sm" onclick="openIssueProcessModal('${it.id}')">處理</button></td>
+        <td class="c"><span class="issue-status ${statusCls}" onclick="openIssueProcessModal('${it.id}')">${issLabel(it.status, ISSUE_STATUS_JA)}</span></td>
+        <td class="c"><button class="btn btn-outline btn-sm" onclick="openIssueProcessModal('${it.id}')">${ta('p9Process')}</button></td>
       </tr>`;
     }).join('');
   }
 
   // 品項異常彙總
-  const rangeLabels = { all:'全部時間', thisweek:'本週', lastweek:'上週', '4weeks':'近4週' };
+  const rangeLabels = { all:ta('p9FilterAllRange'), thisweek:ta('p9RangeThisWeek'), lastweek:ta('p9RangeLastWeek'), '4weeks':ta('p9Range4Weeks') };
   document.getElementById('issueSummaryRangeLabel').textContent = rangeLabels[rangeF] || '';
   const summaryMap = {};
   filtered.forEach(it => {
@@ -2654,11 +2764,11 @@ function renderIssuesPanel() {
   const summaryRows = Object.values(summaryMap).sort((a,b)=>b.count-a.count);
   const sBody = document.getElementById('issueSummaryBody');
   if (!summaryRows.length) {
-    sBody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--muted)">無資料</td></tr>';
+    sBody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--muted)">${ta('p9NoData')}</td></tr>`;
   } else {
     sBody.innerHTML = summaryRows.map(r => {
       const names = [...r.stores].map(storeName).join('、');
-      return `<tr><td>${r.product}</td><td><span class="issue-type-tag">${r.type}</span></td><td class="c">${r.count}</td><td>${names}</td></tr>`;
+      return `<tr><td>${r.product}</td><td><span class="issue-type-tag">${issLabel(r.type, ISSUE_TYPE_JA)}</span></td><td class="c">${r.count}</td><td>${names}</td></tr>`;
     }).join('');
   }
 }
@@ -2678,44 +2788,44 @@ function openIssueProcessModal(id) {
   modal.innerHTML =
     '<div style="background:#fff;border-radius:12px;padding:20px;max-width:520px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,0.2)">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">' +
-        '<h3 style="font-size:15px;font-weight:800">🚨 案件 ' + it.case_no + '</h3>' +
+        '<h3 style="font-size:15px;font-weight:800">' + ta('p9ModalCasePrefix') + it.case_no + '</h3>' +
         '<button id="ipClose" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button>' +
       '</div>' +
       '<div style="font-size:12px;color:var(--muted);line-height:1.9;margin-bottom:10px">' +
-        '門市：<b style="color:var(--text)">' + storeName + '</b>　時間：' + timeStr + '<br>' +
-        '品項：<b style="color:var(--text)">' + it.product_name + '</b>　類型：<span class="issue-type-tag">' + it.issue_type + '</span><br>' +
-        '數量：' + (it.quantity_affected!=null ? (it.quantity_affected + (it.quantity_unit||'')) : '—') +
-          '　同批剩餘庫存：' + (it.remaining_stock_qty!=null ? (it.remaining_stock_qty + (it.quantity_unit||'')) : '—') + '<br>' +
-        '生產日期：' + (it.production_date || '—') + '　批號：' + (it.batch_no || '—') + '　提報人：' + (it.reporter_name || '—') +
+        ta('p9ModalStore') + '<b style="color:var(--text)">' + storeName + '</b>' + ta('p9ModalTime') + timeStr + '<br>' +
+        ta('p9ModalItem') + '<b style="color:var(--text)">' + it.product_name + '</b>' + ta('p9ModalType') + '<span class="issue-type-tag">' + issLabel(it.issue_type, ISSUE_TYPE_JA) + '</span><br>' +
+        ta('p9ModalQty') + (it.quantity_affected!=null ? (it.quantity_affected + (it.quantity_unit||'')) : '—') +
+          ta('p9ModalRemain') + (it.remaining_stock_qty!=null ? (it.remaining_stock_qty + (it.quantity_unit||'')) : '—') + '<br>' +
+        ta('p9ModalProdDate') + (it.production_date || '—') + ta('p9ModalBatch') + (it.batch_no || '—') + ta('p9ModalReporter') + (it.reporter_name || '—') +
       '</div>' +
       '<div style="background:#f8fafc;border-radius:8px;padding:10px;font-size:13px;margin-bottom:12px;white-space:pre-wrap">' + (it.description || '') + '</div>' +
       (photos.length ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">' +
         photos.map(u => '<a href="'+u+'" target="_blank"><img src="'+u+'" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid var(--border)"></a>').join('') +
       '</div>' : '') +
       '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px">' +
-        '<div style="font-size:13px;font-weight:800;margin-bottom:8px">📋 央廚處理回饋</div>' +
+        '<div style="font-size:13px;font-weight:800;margin-bottom:8px">' + ta('p9ModalFeedback') + '</div>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">' +
-          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">案件狀態</label>' +
+          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">' + ta('p9ModalStatusLbl') + '</label>' +
             '<select id="ipStatus" '+(canEdit?'':'disabled')+' style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
-              ['待處理','處理中','已結案'].map(s=>'<option value="'+s+'" '+(it.status===s?'selected':'')+'>'+s+'</option>').join('') +
+              ISSUE_STATUS_OPTIONS.map(s=>'<option value="'+s+'" '+(it.status===s?'selected':'')+'>'+issLabel(s, ISSUE_STATUS_JA)+'</option>').join('') +
             '</select></div>' +
-          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">責任歸屬</label>' +
+          '<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">' + ta('p9ModalRespLbl') + '</label>' +
             '<select id="ipResp" '+(canEdit?'':'disabled')+' style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
-              '<option value="">（未填）</option>' +
-              ISSUE_RESPONSIBILITY_OPTIONS.map(o=>'<option value="'+o+'" '+(it.responsibility===o?'selected':'')+'>'+o+'</option>').join('') +
+              '<option value="">' + ta('p9NotFilled') + '</option>' +
+              ISSUE_RESPONSIBILITY_OPTIONS.map(o=>'<option value="'+o+'" '+(it.responsibility===o?'selected':'')+'>'+issLabel(o, ISSUE_RESP_JA)+'</option>').join('') +
             '</select></div>' +
         '</div>' +
-        '<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">處理方式</label>' +
+        '<div style="margin-bottom:10px"><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">' + ta('p9ModalResolutionLbl') + '</label>' +
           '<select id="ipResolution" '+(canEdit?'':'disabled')+' style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">' +
-            '<option value="">（未填）</option>' +
-            ISSUE_RESOLUTION_OPTIONS.map(o=>'<option value="'+o+'" '+(it.resolution===o?'selected':'')+'>'+o+'</option>').join('') +
+            '<option value="">' + ta('p9NotFilled') + '</option>' +
+            ISSUE_RESOLUTION_OPTIONS.map(o=>'<option value="'+o+'" '+(it.resolution===o?'selected':'')+'>'+issLabel(o, ISSUE_RESO_JA)+'</option>').join('') +
           '</select></div>' +
-        '<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">處理情形說明（門市可查看）</label>' +
+        '<div style="margin-bottom:12px"><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">' + ta('p9ModalNotesLbl') + '</label>' +
           '<textarea id="ipNotes" '+(canEdit?'':'disabled')+' rows="3" style="width:100%;padding:7px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit">'+(it.handler_notes||'')+'</textarea></div>' +
         (canEdit ?
           '<div style="display:flex;gap:8px">' +
-            '<button id="ipSave" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">💾 儲存處理結果</button>' +
-            '<button id="ipCancel" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">取消</button>' +
+            '<button id="ipSave" style="flex:1;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:10px;font-size:14px;font-weight:700;cursor:pointer">' + ta('p9ModalSave') + '</button>' +
+            '<button id="ipCancel" style="background:#f1f5f9;color:var(--text);border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:700;cursor:pointer">' + ta('p9ModalCancel') + '</button>' +
           '</div>' : '') +
       '</div>' +
     '</div>';
