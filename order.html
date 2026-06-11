@@ -85,7 +85,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .submit-btn:disabled { background: #94a3b8; cursor: not-allowed; }
 .submit-btn.submitted { background: var(--green); cursor: not-allowed; }
 .page-pad { height: 80px; }
-.toast { position: fixed; top: 90px; left: 50%; transform: translateX(-50%) translateY(-10px); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 300; opacity: 0; transition: all 0.25s; pointer-events: none; white-space: nowrap; }
+.toast { position: fixed; top: 90px; left: 50%; transform: translateX(-50%) translateY(-10px); background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 100000; opacity: 0; transition: all 0.25s; pointer-events: none; max-width: 90vw; white-space: normal; text-align: center; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .success-screen { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 60vh; padding: 32px 20px; text-align: center; }
 .success-screen.show { display: flex; }

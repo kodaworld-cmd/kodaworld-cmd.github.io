@@ -500,6 +500,9 @@ tr:hover td { background: #f8fafc; }
             <option value="異物">異物</option><option value="品質">品質</option><option value="保存期限">保存期限</option>
             <option value="數量短缺">數量短缺</option><option value="包裝">包裝</option><option value="其他">其他</option>
           </select>
+          <select id="issueFilterProduct" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px;max-width:160px">
+            <option value="">全部品項</option>
+          </select>
           <select id="issueFilterRange" onchange="renderIssuesPanel()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:12px">
             <option value="all">全部時間</option>
             <option value="thisweek">本週</option>
@@ -2140,33 +2143,27 @@ function switchTab(n) {
   if(n===6) renderStoreList();
   if(n===7) loadUserList();
   if(n===8) renderProductList();
-  if(n===9) { loadIssues(); markIssuesSeen(); }
+  if(n===9) loadIssues();
 }
 
-// 異常通報「新案件」提示徽章（後台端記憶最後查看時間）
-async function checkNewIssuesBadge() {
+// 異常通報「待處理」案件數量提示徽章：只要還有未處理案件就持續顯示，
+// 直到該案件狀態被改為「處理中」或「已結案」才會減少／消失
+function setIssueBadge(count) {
   const badge = document.getElementById('issueAdminBadge');
   if (!badge) return;
-  const lastSeen = localStorage.getItem('adminIssueLastSeen');
-  if (!lastSeen) {
-    // 首次使用：建立基準時間，不回溯既有案件
-    localStorage.setItem('adminIssueLastSeen', new Date().toISOString());
-    badge.style.display = 'none';
-    return;
-  }
-  const { count, error } = await sb.from('product_issues')
-    .select('id', { count: 'exact', head: true })
-    .gt('created_at', lastSeen);
-  if (error) { console.warn('checkNewIssuesBadge error', error); return; }
   if (count > 0) { badge.textContent = count > 9 ? '9+' : String(count); badge.style.display = 'inline-block'; }
   else { badge.style.display = 'none'; }
 }
 
-// 進入「異常處理」頁籤時，更新最後查看時間並隱藏徽章
-function markIssuesSeen() {
-  localStorage.setItem('adminIssueLastSeen', new Date().toISOString());
+// 登入時即查詢目前「待處理」案件數量，顯示於異常處理頁籤右上角
+async function checkNewIssuesBadge() {
   const badge = document.getElementById('issueAdminBadge');
-  if (badge) badge.style.display = 'none';
+  if (!badge) return;
+  const { count, error } = await sb.from('product_issues')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', '待處理');
+  if (error) { console.warn('checkNewIssuesBadge error', error); return; }
+  setIssueBadge(count || 0);
 }
 
 // ========================
@@ -2487,7 +2484,7 @@ const T_ADMIN = {
     catFrozen:'冷凍', catAmbient:'常温', catSpecial:'代訂',
     tab9:'🚨 異常處理',
     p9CaseTitle:'🚨 異常通報案件',
-    p9FilterAllStore:'全部門市', p9FilterAllStatus:'全部狀態', p9FilterAllType:'全部類型', p9FilterAllRange:'全部時間',
+    p9FilterAllStore:'全部門市', p9FilterAllStatus:'全部狀態', p9FilterAllType:'全部類型', p9FilterAllRange:'全部時間', p9FilterAllProduct:'全部品項',
     p9RangeThisWeek:'本週', p9RangeLastWeek:'上週', p9Range4Weeks:'近4週',
     p9Refresh:'🔄 重新整理',
     p9ColTime:'時間', p9ColStore:'門市', p9ColItem:'品項', p9ColType:'問題類型', p9ColQty:'數量',
@@ -2570,7 +2567,7 @@ const T_ADMIN = {
     catFrozen:'冷凍', catAmbient:'常温', catSpecial:'代理注文',
     tab9:'🚨 異常対応',
     p9CaseTitle:'🚨 異常報告一覧',
-    p9FilterAllStore:'全店舗', p9FilterAllStatus:'全状態', p9FilterAllType:'全タイプ', p9FilterAllRange:'全期間',
+    p9FilterAllStore:'全店舗', p9FilterAllStatus:'全状態', p9FilterAllType:'全タイプ', p9FilterAllRange:'全期間', p9FilterAllProduct:'全商品',
     p9RangeThisWeek:'今週', p9RangeLastWeek:'先週', p9Range4Weeks:'直近4週',
     p9Refresh:'🔄 更新',
     p9ColTime:'時刻', p9ColStore:'店舗', p9ColItem:'商品', p9ColType:'問題タイプ', p9ColQty:'数量',
@@ -2697,6 +2694,8 @@ function populateIssueFilterOptions() {
   }
   const storeSel = document.getElementById('issueFilterStore');
   if (storeSel && storeSel.options[0]) storeSel.options[0].textContent = ta('p9FilterAllStore');
+  const productSel = document.getElementById('issueFilterProduct');
+  if (productSel && productSel.options[0]) productSel.options[0].textContent = ta('p9FilterAllProduct');
 }
 
 async function loadIssues() {
@@ -2705,12 +2704,23 @@ async function loadIssues() {
   const { data, error } = await sb.from('product_issues').select('*').order('created_at', { ascending:false });
   if (error) { tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">${ta('p9LoadError')}${error.message}</td></tr>`; return; }
   allIssues = data || [];
+  setIssueBadge(allIssues.filter(i => i.status === '待處理').length);
 
   const sel = document.getElementById('issueFilterStore');
   const cur = sel.value;
   const stores = getEffectiveStoreMaster();
   sel.innerHTML = `<option value="">${ta('p9FilterAllStore')}</option>` + stores.map(s=>`<option value="${s.key}">${s.fullName}</option>`).join('');
   sel.value = cur;
+
+  // 品項篩選選項：依出現次數由多到少排序，方便看出常出問題的品項
+  const prodSel = document.getElementById('issueFilterProduct');
+  const curP = prodSel.value;
+  const prodCount = {};
+  allIssues.forEach(it => { prodCount[it.product_name] = (prodCount[it.product_name]||0) + 1; });
+  const prodList = Object.keys(prodCount).sort((a,b) => prodCount[b]-prodCount[a]);
+  prodSel.innerHTML = `<option value="">${ta('p9FilterAllProduct')}</option>` +
+    prodList.map(p=>`<option value="${p}">${p}（${prodCount[p]}）</option>`).join('');
+  prodSel.value = curP;
 
   populateIssueFilterOptions();
   renderIssuesPanel();
@@ -2726,16 +2736,18 @@ function getIssueDateRange(rangeKey) {
 }
 
 function renderIssuesPanel() {
-  const storeF  = document.getElementById('issueFilterStore').value;
-  const statusF = document.getElementById('issueFilterStatus').value;
-  const typeF   = document.getElementById('issueFilterType').value;
-  const rangeF  = document.getElementById('issueFilterRange').value;
-  const range   = getIssueDateRange(rangeF);
+  const storeF   = document.getElementById('issueFilterStore').value;
+  const statusF  = document.getElementById('issueFilterStatus').value;
+  const typeF    = document.getElementById('issueFilterType').value;
+  const productF = document.getElementById('issueFilterProduct').value;
+  const rangeF   = document.getElementById('issueFilterRange').value;
+  const range    = getIssueDateRange(rangeF);
 
   const filtered = allIssues.filter(it => {
     if (storeF && it.store_key !== storeF) return false;
     if (statusF && it.status !== statusF) return false;
     if (typeF && it.issue_type !== typeF) return false;
+    if (productF && it.product_name !== productF) return false;
     if (range) {
       const t = new Date(it.created_at);
       if (t < range.start || t >= range.end) return false;

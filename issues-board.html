@@ -57,8 +57,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .closed-section { margin-top: 18px; }
 .closed-section summary { font-size: 14px; font-weight: 800; cursor: pointer; padding: 12px 14px; background: var(--card); border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); display: flex; align-items: center; gap: 6px; list-style: none; }
 .closed-section summary::-webkit-details-marker { display: none; }
-.closed-section summary::after { content: '展開 ▾'; margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 700; }
-.closed-section[open] summary::after { content: '收合 ▴'; }
+.closed-section summary::after { content: attr(data-label-collapsed); margin-left: auto; color: var(--muted); font-size: 12px; font-weight: 700; }
+.closed-section[open] summary::after { content: attr(data-label-expanded); }
+.lang-btn { background: rgba(255,255,255,0.2); border: none; color: #fff; border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 800; cursor: pointer; flex-shrink: 0; letter-spacing: 1px; }
+.lang-btn:active { background: rgba(255,255,255,0.35); }
 .closed-section[open] summary { border-radius: 12px 12px 0 0; }
 .closed-section > .closed-list { padding-top: 10px; }
 
@@ -70,8 +72,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 <div class="header">
   <div class="header-top">
-    <h1>🚨 珍有福 異常處理看板</h1>
-    <button class="refresh-btn" onclick="loadAll()">🔄 重新整理</button>
+    <h1 id="boardTitle">🚨 珍有福 異常處理看板</h1>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="lang-btn" id="boardLangBtn" onclick="toggleBoardLang()">日本語</button>
+      <button class="refresh-btn" id="boardRefreshBtn" onclick="loadAll()">🔄 重新整理</button>
+    </div>
   </div>
   <div class="header-sub" id="updatedAt">載入中…</div>
 </div>
@@ -79,11 +84,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 <div class="board">
   <div class="stats-row" id="statsRow"></div>
 
-  <div class="section-title">🔴 進行中案件 <span class="count-badge" id="activeCount">0</span></div>
+  <div class="section-title">🔴 <span id="activeTitleText">進行中案件</span> <span class="count-badge" id="activeCount">0</span></div>
   <div id="activeList"><div class="loading-msg">載入中…</div></div>
 
   <details class="closed-section" id="closedDetails">
-    <summary>✅ 已結案紀錄（近4週） <span class="count-badge" id="closedCount">0</span></summary>
+    <summary>✅ <span id="closedTitleText">已結案紀錄（近4週）</span> <span class="count-badge" id="closedCount">0</span></summary>
     <div class="closed-list" id="closedList"></div>
   </details>
 </div>
@@ -131,11 +136,92 @@ function getMonday(date) {
 }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 
+// 取得「案件週」起點（週五為一週起點，週四為一週終點）
+// 例如：今天若為週三，本週起點為「上週五」；今天若為週五，本週起點即為今天
+function getCaseWeekStart(date) {
+  const d = new Date(date);
+  d.setHours(0,0,0,0);
+  const day = d.getDay(); // 0=週日...5=週五,6=週六
+  const diff = (day - 5 + 7) % 7; // 距離本次（含今天）週五已過幾天
+  d.setDate(d.getDate() - diff);
+  return d;
+}
+
 // 提報人姓名遮蔽：固定遮蔽第二個字，例如「王小明」→「王*明」
 function maskReporter(name) {
   if (!name) return '—';
   if (name.length < 2) return name;
   return name[0] + '*' + name.slice(2);
+}
+
+// ========================
+// 中／日語系統
+// ========================
+const T_BOARD = {
+  zh: {
+    title: '🚨 珍有福 異常處理看板',
+    langBtn: '日本語',
+    refresh: '🔄 重新整理',
+    loading: '載入中…',
+    loadError: '讀取失敗：',
+    loadErrorMsg: '資料讀取失敗，請稍後重新整理',
+    updatedAtPrefix: '更新時間：', updatedAtSuffix: '（每2分鐘自動更新）',
+    statPending: '待處理', statProcessing: '處理中', statClosed4w: '本週以前已結案',
+    activeTitle: '進行中案件', closedTitle: '已結案紀錄（本週以前）',
+    expandLabel: '展開 ▾', collapseLabel: '收合 ▴',
+    emptyActive: '目前沒有待處理或處理中的案件 🎉', emptyClosed: '本週以前無已結案紀錄',
+    metaReportTime: '📅 通報時間：', metaReporter: '提報人：',
+    metaQty: '問題數量：', metaRemain: '同批剩餘庫存：',
+    batchProdDate: '生產日期', batchNo: '批號',
+    respLabel: '責任歸屬：', resoLabel: '處理方式：', handlerNotesLabel: '處理說明：', closedAtLabel: '結案時間：',
+  },
+  ja: {
+    title: '🚨 Joyfull珍有福 異常対応ボード',
+    langBtn: '中文',
+    refresh: '🔄 更新',
+    loading: '読み込み中…',
+    loadError: '読み込み失敗：',
+    loadErrorMsg: 'データの取得に失敗しました。後でもう一度お試しください',
+    updatedAtPrefix: '更新日時：', updatedAtSuffix: '（2分ごとに自動更新）',
+    statPending: '未対応', statProcessing: '対応中', statClosed4w: '今週より前の完了',
+    activeTitle: '対応中の案件', closedTitle: '完了記録（今週より前）',
+    expandLabel: '開く ▾', collapseLabel: '閉じる ▴',
+    emptyActive: '現在、未対応・対応中の案件はありません 🎉', emptyClosed: '今週より前の完了記録はありません',
+    metaReportTime: '📅 通報日時：', metaReporter: '報告者：',
+    metaQty: '問題数量：', metaRemain: '同ロット残数：',
+    batchProdDate: '製造日', batchNo: 'ロット番号',
+    respLabel: '責任の所在：', resoLabel: '対応方法：', handlerNotesLabel: '対応内容：', closedAtLabel: '完了日：',
+  },
+};
+
+// 中→日 顯示對照（資料庫值維持中文，僅顯示時依語言轉換）
+const ISSUE_TYPE_JA = {'異物':'異物混入','品質':'品質（変質・食感・カビ等）','保存期限':'賞味期限','數量短缺':'数量不足','包裝':'梱包（破損・封緘不良）','其他':'その他'};
+const ISSUE_STATUS_JA = {'待處理':'未対応','處理中':'対応中','已結案':'完了'};
+const ISSUE_RESP_JA = {'原料供應商':'原材料サプライヤー','央廚-生產':'セントラルキッチン-製造','央廚-包裝':'セントラルキッチン-梱包','物流配送':'配送','門市操作':'店舗オペレーション','其他':'その他'};
+const ISSUE_RESO_JA = {'原門市報廢':'店舗で廃棄','退回央廚':'セントラルキッチンへ返品','換貨補寄':'交換・再送','其他':'その他'};
+
+let boardLang = localStorage.getItem('boardLang') === 'ja' ? 'ja' : 'zh';
+function tb(key) { return T_BOARD[boardLang]?.[key] ?? T_BOARD.zh[key] ?? key; }
+function issLabelB(zh, map) { return boardLang === 'ja' ? (map[zh] || zh) : zh; }
+
+function toggleBoardLang() {
+  boardLang = boardLang === 'zh' ? 'ja' : 'zh';
+  localStorage.setItem('boardLang', boardLang);
+  applyBoardLang();
+  loadAll();
+}
+
+function applyBoardLang() {
+  document.title = boardLang === 'ja' ? 'Joyfull珍有福 異常対応ボード' : '珍有福 異常處理看板';
+  document.documentElement.lang = boardLang === 'ja' ? 'ja' : 'zh-TW';
+  document.getElementById('boardTitle').textContent = tb('title');
+  document.getElementById('boardLangBtn').textContent = tb('langBtn');
+  document.getElementById('boardRefreshBtn').textContent = tb('refresh');
+  document.getElementById('activeTitleText').textContent = tb('activeTitle');
+  document.getElementById('closedTitleText').textContent = tb('closedTitle');
+  const summary = document.querySelector('#closedDetails > summary');
+  summary.dataset.labelCollapsed = tb('expandLabel');
+  summary.dataset.labelExpanded = tb('collapseLabel');
 }
 
 function renderCard(it, isClosed) {
@@ -145,35 +231,35 @@ function renderCard(it, isClosed) {
   const remain = it.remaining_stock_qty != null ? `${it.remaining_stock_qty}${it.quantity_unit || ''}` : '—';
 
   const batchInfo = [];
-  if (it.production_date) batchInfo.push(`生產日期 ${it.production_date}`);
-  if (it.batch_no) batchInfo.push(`批號 ${it.batch_no}`);
+  if (it.production_date) batchInfo.push(`${tb('batchProdDate')} ${it.production_date}`);
+  if (it.batch_no) batchInfo.push(`${tb('batchNo')} ${it.batch_no}`);
 
   const photos = (it.photos || []).map(url =>
     `<a class="photo-thumb" href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" loading="lazy"></a>`
   ).join('');
 
   let resolvedInfo = '';
-  if (isClosed) {
+  if (it.status === '已結案') {
     const parts = [];
-    if (it.responsibility) parts.push(`責任歸屬：${it.responsibility}`);
-    if (it.resolution) parts.push(`處理方式：${it.resolution}`);
-    if (it.handler_notes) parts.push(`處理說明：${it.handler_notes}`);
-    if (it.closed_at) parts.push(`結案時間：${fmtDate(it.closed_at)}`);
+    if (it.responsibility) parts.push(`${tb('respLabel')}${issLabelB(it.responsibility, ISSUE_RESP_JA)}`);
+    if (it.resolution) parts.push(`${tb('resoLabel')}${issLabelB(it.resolution, ISSUE_RESO_JA)}`);
+    if (it.handler_notes) parts.push(`${tb('handlerNotesLabel')}${it.handler_notes}`);
+    if (it.closed_at) parts.push(`${tb('closedAtLabel')}${fmtDate(it.closed_at)}`);
     if (parts.length) resolvedInfo = `<div class="resolved-box">${parts.map(p => `<div>${esc(p)}</div>`).join('')}</div>`;
   }
 
   return `<div class="issue-card">
     <div class="issue-card-top">
-      <span class="issue-status ${statusCls}">${esc(it.status)}</span>
+      <span class="issue-status ${statusCls}">${esc(issLabelB(it.status, ISSUE_STATUS_JA))}</span>
       <span class="case-no">${esc(it.case_no || '')}</span>
     </div>
     <div class="issue-card-main">
       <span class="store-name">${esc(storeName)}</span>
       <span class="product-name">${esc(it.product_name)}</span>
-      <span class="issue-type-tag">${esc(it.issue_type)}</span>
+      <span class="issue-type-tag">${esc(issLabelB(it.issue_type, ISSUE_TYPE_JA))}</span>
     </div>
-    <div class="issue-card-meta">📅 通報時間：${fmtDateTime(it.created_at)}　|　提報人：${esc(maskReporter(it.reporter_name))}</div>
-    <div class="issue-card-meta">問題數量：${esc(qty)}　|　同批剩餘庫存：${esc(remain)}</div>
+    <div class="issue-card-meta">${tb('metaReportTime')}${fmtDateTime(it.created_at)}　|　${tb('metaReporter')}${esc(maskReporter(it.reporter_name))}</div>
+    <div class="issue-card-meta">${tb('metaQty')}${esc(qty)}　|　${tb('metaRemain')}${esc(remain)}</div>
     ${batchInfo.length ? `<div class="issue-card-meta">${batchInfo.map(esc).join('　|　')}</div>` : ''}
     <div class="issue-desc">${esc(it.description)}</div>
     ${photos ? `<div class="photo-preview">${photos}</div>` : ''}
@@ -182,48 +268,61 @@ function renderCard(it, isClosed) {
 }
 
 async function loadAll() {
-  document.getElementById('updatedAt').textContent = '載入中…';
+  document.getElementById('updatedAt').textContent = tb('loading');
   const { data, error } = await sb.from('product_issues').select('*').order('created_at', { ascending: true });
   if (error) {
-    document.getElementById('updatedAt').textContent = '讀取失敗：' + error.message;
-    document.getElementById('activeList').innerHTML = `<div class="empty-msg">資料讀取失敗，請稍後重新整理</div>`;
+    document.getElementById('updatedAt').textContent = tb('loadError') + error.message;
+    document.getElementById('activeList').innerHTML = `<div class="empty-msg">${tb('loadErrorMsg')}</div>`;
     return;
   }
   const all = data || [];
 
-  const active = all.filter(it => it.status !== '已結案');
+  // 當週案件週期：上週五 00:00 ~ 本週四 24:00（與本週四之後即進入下週）
+  const weekStart = getCaseWeekStart(new Date());
+  const weekEnd = addDays(weekStart, 7);
+  const closedCutoff = addDays(weekStart, -21); // 再往前3週（含本週共4週的可視範圍）
 
-  const mon = getMonday(new Date());
-  const cutoff = addDays(mon, -21); // 近4週（含本週共4週）
+  // 進行中案件：尚未結案者，或「當週發生」且已結案者（仍顯示，待確認後再收合）
+  const active = all.filter(it => {
+    if (it.status !== '已結案') return true;
+    const created = new Date(it.created_at);
+    return created >= weekStart && created < weekEnd;
+  });
+
+  // 已結案紀錄（本週以前，近3週內，依結案時間由新到舊）
   const closed = all.filter(it => it.status === '已結案')
-    .filter(it => new Date(it.closed_at || it.updated_at || it.created_at) >= cutoff)
+    .filter(it => {
+      const created = new Date(it.created_at);
+      return created < weekStart && created >= closedCutoff;
+    })
     .sort((a, b) => new Date(b.closed_at || b.updated_at || b.created_at) - new Date(a.closed_at || a.updated_at || a.created_at));
 
-  // 統計
-  const pending = active.filter(i => i.status === '待處理').length;
-  const processing = active.filter(i => i.status === '處理中').length;
+  // 統計（待處理／處理中為目前所有未結案案件，已結案為「本週以前」可展開的數量）
+  const pending = all.filter(i => i.status === '待處理').length;
+  const processing = all.filter(i => i.status === '處理中').length;
   document.getElementById('statsRow').innerHTML = `
-    <div class="stat-card"><div class="stat-label">待處理</div><div class="stat-value orange">${pending}</div></div>
-    <div class="stat-card"><div class="stat-label">處理中</div><div class="stat-value blue">${processing}</div></div>
-    <div class="stat-card"><div class="stat-label">近4週已結案</div><div class="stat-value green">${closed.length}</div></div>
+    <div class="stat-card"><div class="stat-label">${tb('statPending')}</div><div class="stat-value orange">${pending}</div></div>
+    <div class="stat-card"><div class="stat-label">${tb('statProcessing')}</div><div class="stat-value blue">${processing}</div></div>
+    <div class="stat-card"><div class="stat-label">${tb('statClosed4w')}</div><div class="stat-value green">${closed.length}</div></div>
   `;
 
-  // 進行中案件（依通報時間由舊到新，最久未處理者排最前）
+  // 進行中案件（依通報時間由舊到新，最久未處理者排最前；本週已結案者也會列在此處）
   document.getElementById('activeCount').textContent = active.length;
   document.getElementById('activeList').innerHTML = active.length
     ? active.map(it => renderCard(it, false)).join('')
-    : `<div class="empty-msg">目前沒有待處理或處理中的案件 🎉</div>`;
+    : `<div class="empty-msg">${tb('emptyActive')}</div>`;
 
-  // 已結案紀錄（近4週，依結案時間由新到舊）
+  // 已結案紀錄（本週以前，依結案時間由新到舊）
   document.getElementById('closedCount').textContent = closed.length;
   document.getElementById('closedList').innerHTML = closed.length
     ? closed.map(it => renderCard(it, true)).join('')
-    : `<div class="empty-msg">近4週無已結案紀錄</div>`;
+    : `<div class="empty-msg">${tb('emptyClosed')}</div>`;
 
   const now = new Date();
-  document.getElementById('updatedAt').textContent = `更新時間：${fmtDateTime(now)}（每2分鐘自動更新）`;
+  document.getElementById('updatedAt').textContent = tb('updatedAtPrefix') + fmtDateTime(now) + tb('updatedAtSuffix');
 }
 
+applyBoardLang();
 loadAll();
 setInterval(loadAll, 120000);
 </script>
