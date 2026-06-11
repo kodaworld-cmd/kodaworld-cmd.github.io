@@ -581,6 +581,7 @@ async function doRegister() {
 }
 
 async function doLogout() {
+  if (!confirm('確定要登出嗎？')) return;
   await sb.auth.signOut();
   document.getElementById('authScreen').style.display = 'flex';
   document.getElementById('mainApp').style.display = 'none';

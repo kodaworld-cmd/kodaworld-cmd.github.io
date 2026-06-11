@@ -922,7 +922,8 @@ function renderDetailTable() {
       const v=data[p.id]?.order||0;
       return `<td class="qc ${v>0?'on':'off'}">${v>0?v:'—'}</td>`;
     });
-    const rowBoxes = o ? calcOrderBoxes(data) : 0;
+    // 箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）
+    const rowBoxes = (o ? calcOrderBoxes(data) : 0) + calcBreadBoxes(oLast?.data?.[BREAD_ID]?.order || 0);
 
     // 判斷是否截止後修改
     const submittedAt = o?.submitted_at ? new Date(o.submitted_at) : null;
@@ -953,7 +954,8 @@ function renderDetailTable() {
     const t=allOrders.reduce((s,o)=>s+(o.data?.[p.id]?.order||0),0);
     return `<td class="qc ${t>0?'on':'off'}">${t>0?`<strong>${t}</strong>`:'—'}</td>`;
   }).join('');
-  const grandBoxes = allOrders.reduce((s,o)=>s+calcOrderBoxes(o.data||{}),0);
+  const grandBoxes = allOrders.reduce((s,o)=>s+calcOrderBoxes(o.data||{}),0)
+    + lastWeekOrders.reduce((s,o)=>s+calcBreadBoxes(o.data?.[BREAD_ID]?.order||0),0);
   const totRow=`<tr class="total-row"><td>合計</td>${colTotalsHtml}<td class="grand">${grandBoxes} 箱</td><td></td><td></td></tr>`;
   document.getElementById('detailBody').innerHTML=rows.join('')+totRow;
 }
@@ -965,6 +967,11 @@ const LOOSE_BOX_ADMIN_DEFAULT = { 1051:0, 1368:10, 1367:6, 1142:6, 1283:100, 105
 
 function calcOrderBoxes(data) {
   return _calcBoxesByCat(data, null); // 全品項
+}
+// 餐包（代訂）箱數換算：上週訂貨數量 ÷ 每箱包數，無條件進位
+function calcBreadBoxes(qty) {
+  const perBox = LOOSE_BOX_ADMIN_DEFAULT[1367] || 6;
+  return qty > 0 ? Math.ceil(qty / perBox) : 0;
 }
 function calcCatBoxes(data, cat) {
   return _calcBoxesByCat(data, cat);  // 指定分類
@@ -1376,7 +1383,8 @@ function generateShippingOrders() {
     const lastOrder = lastMap[store.key] || { data: {} };
     const rows = _buildShipRows(order, lastOrder);
     if (rows.every(r => !r)) return; // 全空略過
-    const storeBoxes = calcOrderBoxes(order.data || {});
+    // 共計箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）
+    const storeBoxes = calcOrderBoxes(order.data || {}) + calcBreadBoxes(lastOrder?.data?.[BREAD_ID]?.order || 0);
     pages.push({ store, rows, dateStr, storeBoxes });
   });
 
@@ -1431,9 +1439,9 @@ function generateShippingOrders() {
 @page{size:A4 portrait;margin:12mm 10mm}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'標楷體','DFKai-SB',serif;font-size:13pt;line-height:1.1}
-.page{position:relative;width:100%;height:273mm;overflow:hidden;page-break-after:always}
+.page{width:100%;height:273mm;overflow:hidden;page-break-after:always;page-break-inside:avoid;display:flex;flex-direction:column}
 .page:last-child{page-break-after:auto}
-.page-inner{padding-bottom:24mm}
+.page-inner{flex:1 1 auto;min-height:0;overflow:hidden}
 .title{font-size:22pt;font-weight:bold;text-align:center;padding:4px 0;margin-bottom:3px}
 .info-tbl{width:100%;border-collapse:collapse}
 td{padding:2px 6px;vertical-align:middle}
@@ -1450,7 +1458,7 @@ td{padding:2px 6px;vertical-align:middle}
 .batch{width:90px}
 .has-item td{font-size:26pt;height:38px;border-bottom:1px solid #aaa}
 .empty-item td{font-size:26pt;height:38px}
-.foot-bar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;border-top:2.5px solid #000;padding:4px 10px;font-size:34pt;font-weight:bold;background:#fff}
+.foot-bar{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;border-top:2.5px solid #000;padding:4px 10px;font-size:34pt;font-weight:bold;background:#fff}
 </style></head><body>${pagesHtml}</body></html>`;
 
   const win = window.open('', '_blank');
