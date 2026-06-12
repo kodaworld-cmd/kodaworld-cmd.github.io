@@ -1626,27 +1626,18 @@ function issueProductDisplayName(productId, fallbackName) {
   return (currentLang === 'ja' && productId != null && PRODUCT_NAMES_JA[productId]) ? PRODUCT_NAMES_JA[productId] : fallbackName;
 }
 
-// 異常案件「有更新」提醒（裝置端記憶，比對央廚最後處理時間 handled_at）
-function getIssueSeenMap() {
-  try { return JSON.parse(localStorage.getItem('issueSeenMap') || '{}'); } catch(e) { return {}; }
-}
-function setIssueSeen(id, ts) {
-  try {
-    const map = getIssueSeenMap();
-    map[id] = ts || new Date().toISOString();
-    localStorage.setItem('issueSeenMap', JSON.stringify(map));
-  } catch(e) {}
-}
+// 異常通報「未結案」案件數量提示徽章：待處理／處理中皆計入，
+// 直到案件狀態變為「已結案」才會減少／消失
 async function checkIssueUpdates() {
   const badge = document.getElementById('issueUnreadBadge');
   if (!badge) return;
   if (!currentStore) { badge.style.display = 'none'; return; }
-  const { data, error } = await sb.from('product_issues').select('id, handled_at')
-    .eq('store_key', currentStore);
+  const { count, error } = await sb.from('product_issues')
+    .select('id', { count: 'exact', head: true })
+    .eq('store_key', currentStore)
+    .neq('status', '已結案');
   if (error) { console.warn('checkIssueUpdates error', error); return; }
-  const map = getIssueSeenMap();
-  const unread = (data || []).filter(it => it.handled_at && (!map[it.id] || new Date(map[it.id]) < new Date(it.handled_at)));
-  if (unread.length) { badge.textContent = unread.length > 9 ? '9+' : String(unread.length); badge.style.display = 'inline-block'; }
+  if (count > 0) { badge.textContent = count > 9 ? '9+' : String(count); badge.style.display = 'inline-block'; }
   else { badge.style.display = 'none'; }
 }
 
@@ -1906,8 +1897,7 @@ function openIssueDetail(id) {
   document.getElementById('issueDetailBody').innerHTML = html;
   document.getElementById('issueDetailOverlay').style.display = 'flex';
 
-  // 標記為已讀（依目前央廚最後處理時間），更新提醒徽章
-  if (issue.handled_at) setIssueSeen(issue.id, issue.handled_at);
+  // 重新整理徽章（案件被結案後數量會減少）
   checkIssueUpdates();
 }
 

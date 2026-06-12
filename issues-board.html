@@ -136,15 +136,10 @@ function getMonday(date) {
 }
 function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); return r; }
 
-// 取得「案件週」起點（週五為一週起點，週四為一週終點）
-// 例如：今天若為週三，本週起點為「上週五」；今天若為週五，本週起點即為今天
+// 取得「本週」範圍起點：上週五 00:00（截至目前時刻為止都算本週）
+// 例如：今天若為本週一~本週日，「上週五」固定為上一個週五 00:00
 function getCaseWeekStart(date) {
-  const d = new Date(date);
-  d.setHours(0,0,0,0);
-  const day = d.getDay(); // 0=週日...5=週五,6=週六
-  const diff = (day - 5 + 7) % 7; // 距離本次（含今天）週五已過幾天
-  d.setDate(d.getDate() - diff);
-  return d;
+  return addDays(getMonday(date), -3);
 }
 
 // 提報人姓名遮蔽：固定遮蔽第二個字，例如「王小明」→「王*明」
@@ -277,16 +272,15 @@ async function loadAll() {
   }
   const all = data || [];
 
-  // 當週案件週期：上週五 00:00 ~ 本週四 24:00（與本週四之後即進入下週）
+  // 「本週」範圍：上週五 00:00 ~ 截至目前時刻
   const weekStart = getCaseWeekStart(new Date());
-  const weekEnd = addDays(weekStart, 7);
   const closedCutoff = addDays(weekStart, -21); // 再往前3週（含本週共4週的可視範圍）
 
-  // 進行中案件：尚未結案者，或「當週發生」且已結案者（仍顯示，待確認後再收合）
+  // 進行中案件：尚未結案者，或「本週發生」且已結案者（仍顯示，待確認後再收合）
   const active = all.filter(it => {
     if (it.status !== '已結案') return true;
     const created = new Date(it.created_at);
-    return created >= weekStart && created < weekEnd;
+    return created >= weekStart;
   });
 
   // 已結案紀錄（本週以前，近3週內，依結案時間由新到舊）
