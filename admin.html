@@ -893,10 +893,11 @@ async function startAdmin() {
   } catch(e) { console.warn('Settings load error', e); }
 
   await Promise.all([loadData(), loadProductSettings()]);
-  renderSettings();
   applyRoleRestrictions();
   // 登入時即載入異常案件並顯示「待處理」徽章，不需等到點選「異常處理」頁籤
-  loadIssues();
+  // 若登入剛完成、Supabase session 尚未完全就緒導致第一次查詢失敗，1.5 秒後重試一次
+  await loadIssues();
+  setTimeout(loadIssues, 1500);
 }  // end startAdmin
 
 async function loadData() {
@@ -1279,32 +1280,6 @@ function renderMissing() {
   const body=document.getElementById('missingBody');
   if (!missing.length) { body.innerHTML='<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--green);font-weight:700">🎉 所有門市均已下單！</td></tr>'; return; }
   body.innerHTML=missing.map(s=>`<tr><td style="font-family:monospace;color:var(--primary)">${s.code||'—'}</td><td>${s.key}</td><td style="color:var(--muted);font-size:12px">${s.fullName||''}</td><td><span class="badge badge-wait">待下單</span></td></tr>`).join('');
-}
-
-// ========================
-// Settings
-// ========================
-function renderSettings() {
-  const pb=getPerBox();
-  document.getElementById('settingsGrid').innerHTML=PRODUCTS.map(p=>{
-    const inputArea=p.noBox
-      ?`<span style="font-size:12px;color:var(--muted);background:#f1f5f9;padding:5px 10px;border-radius:6px;border:1px solid var(--border)">以${p.unit}計算</span>`
-      :`<div style="display:flex;align-items:center;gap:5px"><input class="per-box-input" type="number" min="1" id="pb_${p.id}" value="${pb[p.id]||1}"><span class="setting-unit">${p.perBoxUnit||p.unit}</span></div>`;
-    return `<div class="setting-item${p.special?' special':''}">
-      <div><div class="setting-name">${p.name}${p.special?'<span style="color:var(--special);font-size:11px;margin-left:4px">代訂</span>':''}${p.noBox?'<span style="color:var(--muted);font-size:11px;margin-left:4px">散裝</span>':''}</div><div class="setting-code">#${p.id} · ${p.cat}</div></div>
-      ${inputArea}
-    </div>`;
-  }).join('');
-}
-
-async function saveSettings() {
-  const data={};
-  PRODUCTS.forEach(p=>{ const inp=document.getElementById(`pb_${p.id}`); if(inp) data[p.id]=parseInt(inp.value)||1; });
-  const { error } = await sb.from('settings').upsert({ key:'per_box_settings', value:data, updated_at:new Date().toISOString() });
-  if (error) { showToast('❌ 儲存失敗'); return; }
-  cachedPerBox = data;
-  showToast('✅ 設定已儲存！');
-  renderAll();
 }
 
 // ========================
@@ -2163,7 +2138,6 @@ function switchTab(n) {
     if(t) t.classList.toggle('active',i===n);
     if(p) p.style.display=i===n?'block':'none';
   });
-  if(n===5) renderSettings();
   if(n===6) renderStoreList();
   if(n===7) loadUserList();
   if(n===8) renderProductList();
@@ -2736,7 +2710,7 @@ async function loadIssues() {
   const tbody = document.getElementById('issueListBody');
   tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">${ta('p9Loading')}</td></tr>`;
   const { data, error } = await sb.from('product_issues').select('*').order('created_at', { ascending:false });
-  if (error) { tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">${ta('p9LoadError')}${error.message}</td></tr>`; return; }
+  if (error) { console.warn('loadIssues error', error); tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--red)">${ta('p9LoadError')}${error.message}</td></tr>`; return; }
   allIssues = data || [];
   setIssueBadge(allIssues.filter(i => i.status === '待處理').length);
 
