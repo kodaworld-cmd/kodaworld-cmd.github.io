@@ -127,11 +127,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .modal-body input[type="text"], .modal-body input[type="number"], .modal-body input[type="date"], .modal-body textarea {
   width: 100%; padding: 9px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; background: #fff; font-family: inherit; box-sizing: border-box;
 }
-/* iOS Safari 的 date input 預設會以較大的系統字體顯示日期，導致欄位比其他欄位高/大；
-   移除原生外觀後改用一般文字欄位樣式，與批號欄位大小一致 */
-.modal-body input[type="date"] {
-  -webkit-appearance: none; appearance: none; line-height: 1.3;
+/* iOS Safari 的 date input 在「未選擇」與「已選擇」狀態下，原生顯示的大小不一致，
+   即使套用相同的 CSS 也無法讓兩種狀態的欄位大小一致。
+   改用「顯示用 div + 透明 input」的疊加方式：
+   實際的 date input 變成透明、覆蓋在顯示框上方（仍可點擊喚出日期選擇器），
+   畫面上看到的文字（日期或提示文字）則由 .date-display 顯示，大小永遠與其他欄位一致 */
+.date-display-wrap { position: relative; }
+.modal-body .date-display-wrap input[type="date"] {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: none; opacity: 0;
+  -webkit-appearance: none; appearance: none;
 }
+.date-display {
+  width: 100%; padding: 9px 10px; border: 1.5px solid var(--border); border-radius: 8px; font-size: 14px; background: #fff; font-family: inherit; box-sizing: border-box; line-height: 1.3; color: var(--text); pointer-events: none; white-space: nowrap; overflow: hidden;
+}
+.date-display.placeholder { color: #94a3b8; }
 .modal-body textarea { resize: vertical; }
 .modal-footer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--border); }
 .modal-btn-primary { flex: 2; background: var(--primary); color: #fff; border: none; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 700; cursor: pointer; }
@@ -359,7 +369,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
         <div class="field" style="min-width:0">
           <label id="issueLabelProdDateEl">生產日期 <span style="color:#ef4444">*</span></label>
-          <input id="issueProdDate" type="date" style="width:100%;min-width:0" onchange="validateIssueProdDate()" oninput="validateIssueProdDate()">
+          <div class="date-display-wrap">
+            <div id="issueProdDateDisplay" class="date-display placeholder">請選擇日期</div>
+            <input id="issueProdDate" type="date" onchange="validateIssueProdDate();updateIssueProdDateDisplay()" oninput="validateIssueProdDate();updateIssueProdDateDisplay()">
+          </div>
           <div id="issueProdDateErr" style="display:none;color:#ef4444;font-size:12px;margin-top:4px;font-weight:700">⚠️ 生產日期不可晚於今天，請重新選擇</div>
         </div>
         <div class="field" style="min-width:0">
@@ -545,7 +558,7 @@ const T = {
     issueLabelProductOther:'品項名稱', issuePhProductOther:'請輸入品項名稱',
     issueLabelType:'問題類型', issueOptSelectType:'請選擇…',
     issueLabelQty:'發生問題數量', issueLabelRemain:'同批號剩餘庫存', issuePhUnit:'單位',
-    issueLabelProdDate:'生產日期', issueProdDateErr:'⚠️ 生產日期不可晚於今天，請重新選擇',
+    issueLabelProdDate:'生產日期', issueProdDateErr:'⚠️ 生產日期不可晚於今天，請重新選擇', issueProdDatePlaceholder:'請選擇日期',
     issueLabelBatch:'批號', issuePhBatch:'僅數字，例：5',
     issueLabelDesc:'問題描述', issuePhDesc:'請詳細描述問題情況',
     issueLabelPhoto:'上傳照片（最多 6 張）',
@@ -605,7 +618,7 @@ const T = {
     issueLabelProductOther:'商品名', issuePhProductOther:'商品名を入力',
     issueLabelType:'異常の種類', issueOptSelectType:'選択してください…',
     issueLabelQty:'異常発生数量', issueLabelRemain:'同ロット残数量', issuePhUnit:'単位',
-    issueLabelProdDate:'製造日', issueProdDateErr:'⚠️ 製造日は本日以前の日付を選択してください',
+    issueLabelProdDate:'製造日', issueProdDateErr:'⚠️ 製造日は本日以前の日付を選択してください', issueProdDatePlaceholder:'日付を選択',
     issueLabelBatch:'ロット番号', issuePhBatch:'数字のみ、例：5',
     issueLabelDesc:'異常内容の詳細', issuePhDesc:'異常の状況を詳しくご記入ください',
     issueLabelPhoto:'写真をアップロード（最大6枚）',
@@ -676,6 +689,7 @@ function applyLang() {
   setLbl('issueLabelProdDateEl', l.issueLabelProdDate, true);
   const issueProdDateErrEl = document.getElementById('issueProdDateErr');
   if (issueProdDateErrEl) issueProdDateErrEl.textContent = l.issueProdDateErr;
+  updateIssueProdDateDisplay();
   setLbl('issueLabelBatchEl', l.issueLabelBatch, true);
   const issueBatchNoEl = document.getElementById('issueBatchNo');
   if (issueBatchNoEl) issueBatchNoEl.placeholder = l.issuePhBatch;
@@ -744,6 +758,20 @@ function formatProdDateDisplay(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   if (!y || !m || !d) return dateStr;
   return `${y}年${m}月${d}日`;
+}
+// 同步「生產日期」顯示框：有值時顯示格式化日期，無值時顯示提示文字
+// （避免原生 date input 在「有/無值」時欄位大小不一致的問題）
+function updateIssueProdDateDisplay() {
+  const el = document.getElementById('issueProdDate');
+  const disp = document.getElementById('issueProdDateDisplay');
+  if (!el || !disp) return;
+  if (el.value) {
+    disp.textContent = formatProdDateDisplay(el.value);
+    disp.classList.remove('placeholder');
+  } else {
+    disp.textContent = t('issueProdDatePlaceholder');
+    disp.classList.add('placeholder');
+  }
 }
 
 // ========================
@@ -1672,8 +1700,10 @@ function openIssueForm() {
   const prodDateEl = document.getElementById('issueProdDate');
   prodDateEl.value = '';
   prodDateEl.max = localISODate(new Date());
-  prodDateEl.style.borderColor = '';
+  const prodDateDispEl = document.getElementById('issueProdDateDisplay');
+  if (prodDateDispEl) prodDateDispEl.style.borderColor = '';
   document.getElementById('issueProdDateErr').style.display = 'none';
+  updateIssueProdDateDisplay();
   document.getElementById('issueBatchNo').value = '';
   document.getElementById('issueDesc').value = '';
   document.getElementById('issueReporterName').value = document.getElementById('submitterName').value || '';
@@ -1756,15 +1786,16 @@ function removeIssuePhoto(i) {
 function validateIssueProdDate() {
   const el = document.getElementById('issueProdDate');
   const err = document.getElementById('issueProdDateErr');
+  const disp = document.getElementById('issueProdDateDisplay');
   if (!el || !err) return true;
   const today = localISODate(new Date());
   if (el.value && el.value > today) {
     err.style.display = 'block';
-    el.style.borderColor = '#ef4444';
+    if (disp) disp.style.borderColor = '#ef4444';
     return false;
   }
   err.style.display = 'none';
-  el.style.borderColor = '';
+  if (disp) disp.style.borderColor = '';
   return true;
 }
 
