@@ -209,7 +209,7 @@ tr:hover td { background: #f8fafc; }
     <div class="tab" id="t4" onclick="switchTab(4)">未下單門市</div>
     <div class="tab" id="t8" onclick="switchTab(8)">🥘 品項管理</div>
     <div class="tab" id="t6" onclick="switchTab(6)">🏪 門市管理</div>
-    <div class="tab" id="t7" onclick="switchTab(7)">👤 帳號管理</div>
+    <div class="tab" id="t7" onclick="switchTab(7)">👤 帳號管理<span id="userAdminBadge" class="nav-badge"></span></div>
     <div class="tab" id="t9" onclick="switchTab(9)">🚨 異常處理<span id="issueAdminBadge" class="nav-badge"></span></div>
   </div>
 
@@ -895,9 +895,10 @@ async function startAdmin() {
   await Promise.all([loadData(), loadProductSettings()]);
   applyRoleRestrictions();
   // 登入時即載入異常案件並顯示「待處理」徽章，不需等到點選「異常處理」頁籤
+  // 同時載入帳號列表並顯示「尚未指派門市」的新申請帳號徽章
   // 若登入剛完成、Supabase session 尚未完全就緒導致第一次查詢失敗，1.5 秒後重試一次
-  await loadIssues();
-  setTimeout(loadIssues, 1500);
+  await Promise.all([loadIssues(), loadUserList()]);
+  setTimeout(() => { loadIssues(); loadUserList(); }, 1500);
 }  // end startAdmin
 
 async function loadData() {
@@ -2153,6 +2154,14 @@ function setIssueBadge(count) {
   else { badge.style.display = 'none'; }
 }
 
+// 帳號管理：尚未指派門市的「店家」帳號數量提醒
+function setUserBadge(count) {
+  const badge = document.getElementById('userAdminBadge');
+  if (!badge) return;
+  if (count > 0) { badge.textContent = count > 9 ? '9+' : String(count); badge.style.display = 'inline-block'; }
+  else { badge.style.display = 'none'; }
+}
+
 // ========================
 // 帳號管理
 // ========================
@@ -2174,6 +2183,7 @@ async function loadUserList() {
   ]);
   if (!profiles?.length) {
     body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--muted)">尚無使用者</td></tr>';
+    setUserBadge(0);
     return;
   }
   const accessMap = {};
@@ -2181,6 +2191,12 @@ async function loadUserList() {
     if (!accessMap[a.user_id]) accessMap[a.user_id] = [];
     accessMap[a.user_id].push(a.store_key);
   });
+  // 新申請帳號（店家角色、尚未指派任何門市）數量 → 帳號管理徽章
+  const needAssignCount = profiles.filter(p => {
+    const role = p.role || (p.is_admin ? 'admin' : 'store');
+    return role === 'store' && (accessMap[p.id]||[]).length === 0;
+  }).length;
+  setUserBadge(needAssignCount);
   // 只列啟用中門市（停用門市不出現在指派選單）
   const effectiveStores = [
     ...ALL_STORE_KEYS.filter(k => !cachedDisabledStores.includes(k)),
