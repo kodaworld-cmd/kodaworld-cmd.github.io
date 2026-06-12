@@ -895,7 +895,8 @@ async function startAdmin() {
   await Promise.all([loadData(), loadProductSettings()]);
   renderSettings();
   applyRoleRestrictions();
-  checkNewIssuesBadge();
+  // 登入時即載入異常案件並顯示「待處理」徽章，不需等到點選「異常處理」頁籤
+  loadIssues();
 }  // end startAdmin
 
 async function loadData() {
@@ -2176,15 +2177,6 @@ function setIssueBadge(count) {
   if (!badge) return;
   if (count > 0) { badge.textContent = count > 9 ? '9+' : String(count); badge.style.display = 'inline-block'; }
   else { badge.style.display = 'none'; }
-}
-
-// 登入時即查詢目前「待處理」案件數量，顯示於異常處理頁籤右上角
-async function checkNewIssuesBadge() {
-  const badge = document.getElementById('issueAdminBadge');
-  if (!badge) return;
-  const { data, error } = await sb.from('product_issues').select('id').eq('status', '待處理');
-  if (error) { console.warn('checkNewIssuesBadge error', error); return; }
-  setIssueBadge((data || []).length);
 }
 
 // ========================
