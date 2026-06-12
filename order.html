@@ -351,14 +351,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
           </div>
         </div>
       </div>
-      <div class="field">
-        <label id="issueLabelProdDateEl">生產日期 <span style="color:#ef4444">*</span></label>
-        <input id="issueProdDate" type="date" style="width:100%" onchange="validateIssueProdDate()" oninput="validateIssueProdDate()">
-        <div id="issueProdDateErr" style="display:none;color:#ef4444;font-size:12px;margin-top:4px;font-weight:700">⚠️ 生產日期不可晚於今天，請重新選擇</div>
-      </div>
-      <div class="field">
-        <label id="issueLabelBatchEl">批號 <span style="color:#ef4444">*</span></label>
-        <input id="issueBatchNo" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="僅數字，例：5" style="width:100%">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="field" style="min-width:0">
+          <label id="issueLabelProdDateEl">生產日期 <span style="color:#ef4444">*</span></label>
+          <input id="issueProdDate" type="date" style="width:100%;min-width:0" onchange="validateIssueProdDate()" oninput="validateIssueProdDate()">
+          <div id="issueProdDateErr" style="display:none;color:#ef4444;font-size:12px;margin-top:4px;font-weight:700">⚠️ 生產日期不可晚於今天，請重新選擇</div>
+        </div>
+        <div class="field" style="min-width:0">
+          <label id="issueLabelBatchEl">批號 <span style="color:#ef4444">*</span></label>
+          <input id="issueBatchNo" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="僅數字，例：5" style="width:100%;min-width:0">
+        </div>
       </div>
       <div class="field">
         <label id="issueLabelDescEl">問題描述 <span style="color:#ef4444">*</span></label>
@@ -731,6 +733,13 @@ function getThursday(mon, weeksAhead=0) { const d=new Date(mon); d.setDate(d.get
 function fmtDate(d) { return `${d.getMonth()+1}/${d.getDate()}（${['日','一','二','三','四','五','六'][d.getDay()]}）`; }
 function fmtShort(d) { return `${d.getMonth()+1}/${d.getDate()}`; }
 function localISODate(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// 將 "YYYY-MM-DD" 轉為「YYYY年M月D日」（中／日文皆通用此格式）
+function formatProdDateDisplay(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  return `${y}年${m}月${d}日`;
+}
 
 // ========================
 // State
@@ -1875,8 +1884,10 @@ function openIssueDetail(id) {
     <div class="detail-row"><span class="dl">${t('issueDetailType')}</span><span class="dv">${issLabel(issue.issue_type, ISSUE_TYPE_JA)}</span></div>
     ${issue.quantity_affected != null ? `<div class="detail-row"><span class="dl">${t('issueDetailQty')}</span><span class="dv">${issue.quantity_affected} ${issue.quantity_unit||''}</span></div>` : ''}
     ${issue.remaining_stock_qty != null ? `<div class="detail-row"><span class="dl">${t('issueDetailRemain')}</span><span class="dv">${issue.remaining_stock_qty} ${issue.quantity_unit||''}</span></div>` : ''}
-    ${issue.production_date ? `<div class="detail-row"><span class="dl">${t('issueDetailProdDate')}</span><span class="dv">${issue.production_date}</span></div>` : ''}
-    ${issue.batch_no ? `<div class="detail-row"><span class="dl">${t('issueDetailBatch')}</span><span class="dv">${issue.batch_no}</span></div>` : ''}
+    ${(issue.production_date || issue.batch_no) ? `<div class="detail-row"><span class="dl">${t('issueDetailProdDate')}</span><span class="dv">${[
+      issue.production_date ? formatProdDateDisplay(issue.production_date) : '',
+      issue.batch_no ? (t('issueDetailBatch') + issue.batch_no) : ''
+    ].filter(Boolean).join(' ')}</span></div>` : ''}
     <div class="detail-row"><span class="dl">${t('issueDetailReporter')}</span><span class="dv">${issue.reporter_name||''}</span></div>
     <div class="detail-section-title">${t('issueDetailDescTitle')}</div>
     <div style="font-size:13px;line-height:1.6;white-space:pre-wrap">${issue.description}</div>`;
