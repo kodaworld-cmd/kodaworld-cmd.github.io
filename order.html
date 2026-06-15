@@ -534,7 +534,7 @@ const T = {
     tagSpecial:'代訂', tagUnit:'單位：', tagStockUnit:'盤點：', tagOrderUnit:'訂貨：',
     btnSubmit:'送出訂單', btnSubmitting:'送出中…', btnSubmitted:'已送出', btnBack:'返回主頁',
     successTitle:'訂單送出成功！', toastStore:'請先選擇門市',
-    successBreadNote:'此為代訂商品，將於下週四（{date}）配送',
+    successBreadNote:'此為代訂商品，將於下週 {date} 配送',
     successLastWeekBread:'🍞 上週訂購的餐包 {qty} 包，將隨本次貨物於{date}一併送達',
     toastName:'請輸入訂貨人姓名', toastItem:'請至少訂一項商品', toastFail:'❌ 送出失敗，請重試',
     historyEmpty:'請先選擇門市以查看紀錄', historyNone:'尚無訂貨紀錄', historyLoading:'⏳ 載入中…',
@@ -596,7 +596,7 @@ const T = {
     tagSpecial:'代理注文', tagUnit:'単位：', tagStockUnit:'在庫：', tagOrderUnit:'発注：',
     btnSubmit:'発注を送信', btnSubmitting:'送信中…', btnSubmitted:'送信済み', btnBack:'トップへ戻る',
     successTitle:'発注が完了しました！', toastStore:'店舗を選択してください',
-    successBreadNote:'代理注文商品のため、来週木曜（{date}）に配送されます',
+    successBreadNote:'代理注文商品のため、来週 {date} に配送されます',
     successLastWeekBread:'🍞 先週ご注文のパン {qty} 個は、今回の貨物（{date}）に同梱されます',
     toastName:'担当者名を入力してください', toastItem:'商品を1つ以上選択してください', toastFail:'❌ 送信に失敗しました',
     historyEmpty:'店舗を選択して履歴を確認', historyNone:'発注履歴がありません', historyLoading:'⏳ 読み込み中…',
@@ -1511,19 +1511,29 @@ async function submitOrder() {
   document.getElementById('pageOrder').style.display = 'none';
   document.getElementById('summaryBar').style.display = 'none';
   document.getElementById('hSuccess').textContent = t('successTitle');
+  // 餐包（代訂商品）與一般本週四配送品項分開列示，避免混在一起不易辨識
+  const regularItems = ordered.filter(p => !p.special);
+  const breadItem = ordered.find(p => p.special);
+
   let detailHtml =
     `<strong>${currentStore}</strong>　${submitterName}<br>${fmtDate(del)}　<strong>${boxes} 箱</strong><br><br>` +
-    ordered.map(p=>{
+    regularItems.map(p=>{
       const dn = currentLang==='ja'&&PRODUCT_NAMES_JA[p.id]?PRODUCT_NAMES_JA[p.id]:p.name;
-      // 餐包為代訂商品，本次下單的數量是「下週」才配送，需另外標示配送時間
-      const breadNote = p.special
-        ? `<br><span style="color:#7c3aed;font-size:12px">${t('successBreadNote').replace('{date}', fmtDate(nextDel))}</span>`
-        : '';
-      return `${dn} × ${orderData[p.id].order} ${p.unit}${p.special?' 🍞':''}${breadNote}`;
+      return `${dn} × ${orderData[p.id].order} ${p.unit}`;
     }).join('<br>');
+
+  // 餐包為代訂商品，本次下單的數量是「下週」才配送，獨立成一個區塊標示配送時間
+  if (breadItem) {
+    const dn = currentLang==='ja'&&PRODUCT_NAMES_JA[breadItem.id]?PRODUCT_NAMES_JA[breadItem.id]:breadItem.name;
+    detailHtml += `<div style="margin-top:10px;padding:8px 12px;background:#f5f3ff;border:1.5px solid #7c3aed;border-radius:8px;font-size:13px;color:#6d28d9;text-align:left">` +
+      `🍞 ${dn} × ${orderData[breadItem.id].order} ${breadItem.unit}<br>` +
+      `<span style="font-size:12px">${t('successBreadNote').replace('{date}', fmtDate(nextDel))}</span>` +
+      `</div>`;
+  }
+
   // 上週訂購的餐包，會隨本次貨物一併送達（本週四）
   if (lastWeekBreadQty > 0) {
-    detailHtml += `<div style="margin-top:10px;padding:8px 12px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;font-size:12px;color:#1d4ed8;text-align:left">` +
+    detailHtml += `<div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;font-size:12px;color:#1d4ed8;text-align:left">` +
       t('successLastWeekBread').replace('{qty}', lastWeekBreadQty).replace('{date}', fmtDate(del)) +
       `</div>`;
   }
