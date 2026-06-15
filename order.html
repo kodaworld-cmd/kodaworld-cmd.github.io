@@ -733,6 +733,8 @@ function applyLang() {
   renderProducts();
   renderLastWeekBread();
   updateSummary();
+  // 若目前正顯示「訂單送出成功」畫面，切換語言時同步重新渲染
+  if (document.getElementById('successScreen')?.classList.contains('show')) renderSuccessScreen();
 }
 
 // ========================
@@ -790,6 +792,7 @@ let canUnlockCurrent = false; // 目前帳號是否可解鎖修改本週訂單�
 let lastWeekBreadQty = 0;    // 上週餐包訂購量（本週隨貨出貨）
 let minBoxesSettings = {};   // { store_key: 最低箱數 }
 let inventoryOnly = false;   // 只盤點模式
+let lastSubmittedOrder = null; // 送出成功畫面所需資料（供切換語言時重新渲染）
 
 const MIN_BOXES_DEFAULT = 4;
 const MIN_BOXES_INIT = { '新店碧潭':6, '新店家樂福':6, '宜蘭店':6, '南投埔里':6, '南投家樂福':6 };
@@ -1510,40 +1513,54 @@ async function submitOrder() {
   const { boxes } = calcEstimatedBoxes();
   document.getElementById('pageOrder').style.display = 'none';
   document.getElementById('summaryBar').style.display = 'none';
+
+  // 記錄本次送出結果，供切換語言時重新渲染成功畫面
+  lastSubmittedOrder = {
+    storeName: currentStore, submitterName, del, nextDel, boxes,
+    ordered: ordered.map(p => ({ id: p.id, name: p.name, unit: p.unit, qty: orderData[p.id].order, special: p.special || false })),
+    lastWeekBreadQty,
+  };
+  renderSuccessScreen();
+  document.getElementById('successScreen').classList.add('show');
+}
+
+// 渲染「訂單送出成功」畫面內容（依目前語言），切換語言時可重新呼叫
+function renderSuccessScreen() {
+  if (!lastSubmittedOrder) return;
+  const { storeName, submitterName, del, nextDel, boxes, ordered, lastWeekBreadQty: lwbQty } = lastSubmittedOrder;
   document.getElementById('hSuccess').textContent = t('successTitle');
   // 餐包（代訂商品）與一般本週四配送品項分開列示，避免混在一起不易辨識
   const regularItems = ordered.filter(p => !p.special);
   const breadItem = ordered.find(p => p.special);
 
   let detailHtml =
-    `<strong>${currentStore}</strong>　${submitterName}<br>${fmtDate(del)}　<strong>${boxes} 箱</strong><br><br>` +
+    `<strong>${storeName}</strong>　${submitterName}<br>${fmtDate(del)}　<strong>${boxes} 箱</strong><br><br>` +
     regularItems.map(p=>{
       const dn = currentLang==='ja'&&PRODUCT_NAMES_JA[p.id]?PRODUCT_NAMES_JA[p.id]:p.name;
-      return `${dn} × ${orderData[p.id].order} ${p.unit}`;
+      return `${dn} × ${p.qty} ${p.unit}`;
     }).join('<br>');
 
   // 餐包為代訂商品，本次下單的數量是「下週」才配送，獨立成一個區塊標示配送時間
   if (breadItem) {
     const dn = currentLang==='ja'&&PRODUCT_NAMES_JA[breadItem.id]?PRODUCT_NAMES_JA[breadItem.id]:breadItem.name;
     detailHtml += `<div style="margin-top:10px;padding:8px 12px;background:#f5f3ff;border:1.5px solid #7c3aed;border-radius:8px;font-size:13px;color:#6d28d9;text-align:left">` +
-      `🍞 ${dn} × ${orderData[breadItem.id].order} ${breadItem.unit}<br>` +
+      `🍞 ${dn} × ${breadItem.qty} ${breadItem.unit}<br>` +
       `<span style="font-size:12px">${t('successBreadNote').replace('{date}', fmtDate(nextDel))}</span>` +
       `</div>`;
   }
 
   // 上週訂購的餐包，會隨本次貨物一併送達（本週四）
-  if (lastWeekBreadQty > 0) {
+  if (lwbQty > 0) {
     detailHtml += `<div style="margin-top:8px;padding:8px 12px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;font-size:12px;color:#1d4ed8;text-align:left">` +
-      t('successLastWeekBread').replace('{qty}', lastWeekBreadQty).replace('{date}', fmtDate(del)) +
+      t('successLastWeekBread').replace('{qty}', lwbQty).replace('{date}', fmtDate(del)) +
       `</div>`;
   }
   document.getElementById('successDetail').innerHTML = detailHtml;
   document.getElementById('btnBack').textContent = t('btnBack');
-  document.getElementById('successScreen').classList.add('show');
 }
 
 function resetAndBack() {
-  orderData = {}; isSubmitted = false; lastWeekBreadQty = 0; inventoryOnly = false;
+  orderData = {}; isSubmitted = false; lastWeekBreadQty = 0; inventoryOnly = false; lastSubmittedOrder = null;
   const toggle = document.getElementById('inventoryToggle');
   const thumb  = document.getElementById('inventoryThumb');
   if (toggle) toggle.style.background = '#d1d5db';
