@@ -541,6 +541,8 @@ const T = {
     historyBy:'提交：', historyStock:'盤點', historyOrder:'訂',
     langSwitch:'日本語',
     summaryItems:'種品項', summaryBoxes:'預估', summaryDefault:'請先選擇門市',
+    headerSubDefault:'請選擇門市', unlockConfirm:'確定解鎖「{store}」本週訂單並重新編輯？', unlockedToast:'✅ 已解鎖，可重新編輯並送出',
+    lastWeekBreadUnit:'包',
     lastWeekBreadLabel:'🍞 本週隨貨出貨餐包（上週已訂）',
     historyNotOrdered:'　未訂',
     inventoryOnlyLabel:'📋 只盤點，不訂貨',
@@ -552,6 +554,11 @@ const T = {
     waitingStoreMsg:'帳號已驗證，請等待總部指派可訂購的門市。<br>指派完成後重新整理頁面即可使用。',
     waitingStoreBtn:'登出',
     minBoxWarn:'⚠️ 預估 {boxes} 箱，未達最低出貨量 {min} 箱，運費仍以 {min} 箱計算',
+    minBoxWarnTitle:'預估 {boxes} 箱，未達最低出貨量 {min} 箱',
+    minBoxWarnBody:'運費仍以 {min} 箱計算<br>是否要返回補充訂貨？',
+    btnBackEdit:'← 返回修改', btnSubmitDirect:'直接送出',
+    deadlineWarnMsg:'因已超過下單時間，<br>請 另外LINE 通知央廚',
+    btnCancel:'取消', btnConfirmSubmit:'確定送出',
     breadNextWeek:'　＋下週餐包 {qty} 包',
     // 異常通報
     navIssue:'異常通報', btnLogout:'登出', logoutConfirm:'確定要登出嗎？',
@@ -604,6 +611,8 @@ const T = {
     historyNotOrdered:'　未発注',
     langSwitch:'中文',
     summaryItems:'品目', summaryBoxes:'推定', summaryDefault:'店舗を選択してください',
+    headerSubDefault:'店舗を選択してください', unlockConfirm:'「{store}」の今週の発注をロック解除して再編集しますか？', unlockedToast:'✅ ロック解除しました。再編集して送信できます',
+    lastWeekBreadUnit:'袋',
     lastWeekBreadLabel:'🍞 今週同梱出荷 塩バターロール（先週発注済）',
     inventoryOnlyLabel:'📋 棚卸のみ・発注なし',
     inventoryOnlyHint:'ONにすると在庫数のみ記録され、発注は送信されません',
@@ -614,6 +623,11 @@ const T = {
     waitingStoreMsg:'アカウントは認証済みです。本部から店舗が指定されるまでお待ちください。<br>指定後にページを更新すると使用可能になります。',
     waitingStoreBtn:'ログアウト',
     minBoxWarn:'⚠️ 推定 {boxes} 箱。最低出荷数 {min} 箱に未達。運賃は {min} 箱で計算されます',
+    minBoxWarnTitle:'推定 {boxes} 箱、最低出荷数 {min} 箱に未達',
+    minBoxWarnBody:'運賃は {min} 箱で計算されます<br>店舗に戻って追加注文しますか？',
+    btnBackEdit:'← 戻って編集', btnSubmitDirect:'このまま送信',
+    deadlineWarnMsg:'締め切り時間を過ぎているため、<br>LINEで本部へご連絡ください',
+    btnCancel:'キャンセル', btnConfirmSubmit:'送信を確定',
     breadNextWeek:'　＋来週パン {qty} 袋',
     // 異常通報
     navIssue:'異常報告', btnLogout:'ログアウト', logoutConfirm:'ログアウトしますか？',
@@ -723,12 +737,14 @@ function applyLang() {
   const banner = document.getElementById('submittedBanner');
   if (banner) banner.textContent = canUnlockCurrent ? l.submittedBannerEditable : l.submittedBanner;
   const btn = document.getElementById('submitBtn');
-  if (btn && !isSubmitted) btn.textContent = l.btnSubmit;
+  if (btn && !isSubmitted) btn.textContent = inventoryOnly ? l.btnInventorySubmit : l.btnSubmit;
   // 只盤點切換標籤
   const invLabel = document.getElementById('inventoryOnlyLabel');
   if (invLabel) invLabel.textContent = l.inventoryOnlyLabel;
   const invHint = document.getElementById('inventoryOnlyHint');
   if (invHint) invHint.textContent = l.inventoryOnlyHint;
+  // 尚未選擇門市時，標題副標保持與目前語言一致
+  if (!currentStore) document.getElementById('headerSub').textContent = l.headerSubDefault;
   checkDeadline();
   renderProducts();
   renderLastWeekBread();
@@ -1122,7 +1138,7 @@ function onStoreChange() {
   currentStore = document.getElementById('storeSelect').value;
   const thisMonday = getOrderWeekMonday();
   const del = getThursday(thisMonday, 0);
-  document.getElementById('headerSub').textContent = currentStore ? `${currentStore}　配送日 ${fmtShort(del)}` : '請選擇門市';
+  document.getElementById('headerSub').textContent = currentStore ? `${currentStore}　配送日 ${fmtShort(del)}` : t('headerSubDefault');
   loadOrderState();
   if (document.getElementById('pageIssue').style.display !== 'none') renderIssueList();
   checkIssueUpdates();
@@ -1162,10 +1178,10 @@ async function loadOrderState() {
     banner.textContent = canUnlock ? t('submittedBannerEditable') : t('submittedBanner');
     // 截止前店家或 manager/admin 可看到解鎖按鈕；截止後 viewer/store 只能看
     if (canUnlock) {
-      btn.textContent = '🔓 解鎖修改'; btn.className = 'submit-btn'; btn.disabled = false;
+      btn.textContent = t('btnUnlock'); btn.className = 'submit-btn'; btn.disabled = false;
       btn.onclick = () => unlockOrder();
     } else {
-      btn.textContent = '已送出'; btn.className = 'submit-btn submitted'; btn.disabled = true;
+      btn.textContent = t('btnSubmitted'); btn.className = 'submit-btn submitted'; btn.disabled = true;
       btn.onclick = null;
     }
   } else {
@@ -1173,11 +1189,11 @@ async function loadOrderState() {
     isSubmitted = false;
     document.getElementById('submittedBanner').style.display = 'none';
     if (canSubmit) {
-      btn.textContent = '送出訂單'; btn.className = 'submit-btn'; btn.disabled = true;
+      btn.textContent = t('btnSubmit'); btn.className = 'submit-btn'; btn.disabled = true;
       btn.onclick = () => submitOrder();
     } else {
       // viewer
-      btn.textContent = '查看模式'; btn.className = 'submit-btn submitted'; btn.disabled = true;
+      btn.textContent = t('btnViewOnly'); btn.className = 'submit-btn submitted'; btn.disabled = true;
       btn.onclick = null;
     }
   }
@@ -1187,13 +1203,13 @@ async function loadOrderState() {
 }
 
 function unlockOrder() {
-  if (!confirm(`確定解鎖「${currentStore}」本週訂單並重新編輯？`)) return;
+  if (!confirm(t('unlockConfirm').replace('{store}', currentStore))) return;
   isSubmitted = false;
   document.getElementById('submittedBanner').style.display = 'none';
   const btn = document.getElementById('submitBtn');
-  btn.textContent = '送出訂單'; btn.className = 'submit-btn'; btn.disabled = true;
+  btn.textContent = t('btnSubmit'); btn.className = 'submit-btn'; btn.disabled = true;
   btn.onclick = () => submitOrder();
-  showToast('✅ 已解鎖，可重新編輯並送出');
+  showToast(t('unlockedToast'));
   renderProducts();
   updateSummary();
 }
@@ -1265,7 +1281,7 @@ function setStock(id, val) {
   orderData[id].stock = parseInt(val) || '';
 }
 function setOrder(id, val) {
-  if (!currentStore) { showToast('請先選擇門市'); return; }
+  if (!currentStore) { showToast(t('toastStore')); return; }
   if (!orderData[id]) orderData[id] = { stock:'', order:0 };
   const { min, step } = getProductRule(id);
   let n = Math.max(0, parseInt(val)||0);
@@ -1279,7 +1295,7 @@ function setOrder(id, val) {
   updateSummary();
 }
 function changeOrder(id, delta) {
-  if (!currentStore) { showToast('請先選擇門市'); return; }
+  if (!currentStore) { showToast(t('toastStore')); return; }
   if (!orderData[id]) orderData[id] = { stock:'', order:0 };
   const { min, step } = getProductRule(id);
   const cur = orderData[id].order || 0;
@@ -1359,7 +1375,7 @@ function toggleInventoryOnly() {
   if (inventoryOnly) {
     toggle.style.background = '#7c3aed';
     thumb.style.left = '20px';
-    if (btn && !isSubmitted) { btn.textContent = '送出盤點'; btn.disabled = !currentStore || !document.getElementById('submitterName').value.trim(); }
+    if (btn && !isSubmitted) { btn.textContent = t('btnInventorySubmit'); btn.disabled = !currentStore || !document.getElementById('submitterName').value.trim(); }
   } else {
     toggle.style.background = '#d1d5db';
     thumb.style.left = '2px';
@@ -1374,7 +1390,7 @@ function renderLastWeekBread() {
   if (!banner) return;
   if (lastWeekBreadQty > 0) {
     document.getElementById('lastWeekBreadBannerLabel').textContent = t('lastWeekBreadLabel');
-    document.getElementById('lastWeekBreadBannerQty').textContent = `${lastWeekBreadQty} 包`;
+    document.getElementById('lastWeekBreadBannerQty').textContent = `${lastWeekBreadQty} ${t('lastWeekBreadUnit')}`;
     banner.style.display = 'block';
   } else {
     banner.style.display = 'none';
@@ -1422,12 +1438,12 @@ function showMinBoxWarning(boxes, minB) {
       '<div style="background:#fff;border-radius:14px;padding:24px 20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2);text-align:center">' +
         '<div style="font-size:36px;margin-bottom:10px">📦</div>' +
         '<div style="font-size:15px;font-weight:800;color:#d97706;line-height:1.6;margin-bottom:6px">' +
-          '預估 ' + boxes + ' 箱，未達最低出貨量 ' + minB + ' 箱' +
+          t('minBoxWarnTitle').replace('{boxes}', boxes).replace(/\{min\}/g, minB) +
         '</div>' +
-        '<div style="font-size:13px;color:#64748b;margin-bottom:20px">運費仍以 ' + minB + ' 箱計算<br>是否要返回補充訂貨？</div>' +
+        '<div style="font-size:13px;color:#64748b;margin-bottom:20px">' + t('minBoxWarnBody').replace(/\{min\}/g, minB) + '</div>' +
         '<div style="display:flex;gap:10px">' +
-          '<button id="mbBack" style="flex:1;padding:11px;border:none;border-radius:9px;font-size:14px;font-weight:700;background:#d97706;color:#fff;cursor:pointer">← 返回修改</button>' +
-          '<button id="mbGo"   style="flex:1;padding:11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-weight:700;background:#f8fafc;color:#64748b;cursor:pointer">直接送出</button>' +
+          '<button id="mbBack" style="flex:1;padding:11px;border:none;border-radius:9px;font-size:14px;font-weight:700;background:#d97706;color:#fff;cursor:pointer">' + t('btnBackEdit') + '</button>' +
+          '<button id="mbGo"   style="flex:1;padding:11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-weight:700;background:#f8fafc;color:#64748b;cursor:pointer">' + t('btnSubmitDirect') + '</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(modal);
@@ -1444,11 +1460,11 @@ function showDeadlineWarning() {
       '<div style="background:#fff;border-radius:14px;padding:24px 20px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2);text-align:center">' +
         '<div style="font-size:36px;margin-bottom:10px">⚠️</div>' +
         '<div style="font-size:15px;font-weight:800;color:#dc2626;line-height:1.6;margin-bottom:20px">' +
-          '因已超過下單時間，<br>請 另外LINE 通知央廚' +
+          t('deadlineWarnMsg') +
         '</div>' +
         '<div style="display:flex;gap:10px">' +
-          '<button id="dlgCancel" style="flex:1;padding:11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-weight:700;background:#f8fafc;color:#64748b;cursor:pointer">取消</button>' +
-          '<button id="dlgConfirm" style="flex:1;padding:11px;border:none;border-radius:9px;font-size:14px;font-weight:700;background:#dc2626;color:#fff;cursor:pointer">確定送出</button>' +
+          '<button id="dlgCancel" style="flex:1;padding:11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-weight:700;background:#f8fafc;color:#64748b;cursor:pointer">' + t('btnCancel') + '</button>' +
+          '<button id="dlgConfirm" style="flex:1;padding:11px;border:none;border-radius:9px;font-size:14px;font-weight:700;background:#dc2626;color:#fff;cursor:pointer">' + t('btnConfirmSubmit') + '</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(modal);
@@ -1570,10 +1586,10 @@ function resetAndBack() {
   document.getElementById('successScreen').classList.remove('show');
   document.getElementById('storeSelect').value = '';
   currentStore = '';
-  document.getElementById('headerSub').textContent = '請選擇門市';
+  document.getElementById('headerSub').textContent = t('headerSubDefault');
   document.getElementById('submittedBanner').style.display = 'none';
   const btn = document.getElementById('submitBtn');
-  btn.textContent = '送出訂單'; btn.className = 'submit-btn'; btn.disabled = true;
+  btn.textContent = t('btnSubmit'); btn.className = 'submit-btn'; btn.disabled = true;
   renderProducts(); renderLastWeekBread(); updateSummary();
   switchNav('order');
 }
