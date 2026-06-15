@@ -278,7 +278,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
         </div>
       </div>
       <div class="info-row">
-        📦 訂貨以<strong>箱</strong>為單位，牛排鹽、青醬等以<strong>包</strong>為單位。<br>
+        📦 訂貨以<strong>箱</strong>為單位，牛排鹽、青醬、天婦羅碎、義式香蒜醬、餐包等以<strong>包</strong>為單位，哈密瓜糖漿以<strong>罐</strong>為單位。<br>
         ⏰ 請於週一上午 10:00 前送出，超時請在 LINE 群組告知。
       </div>
     </div>
@@ -525,7 +525,7 @@ const T = {
     labelStore:'門市', labelName:'訂貨人姓名', placeholderStore:'選擇門市…', placeholderName:'請輸入姓名',
     regularLabel:'📦 一般品項配送日', regularNote:'本週四配送到門市',
     breadLabel:'🍞 餐包配送日', breadNote:'下週四配送（提前一週）',
-    infoText:'訂貨以<strong>箱</strong>為單位，牛排鹽、青醬等以<strong>包</strong>為單位。<br>⏰ 請於週一上午 10:00 前送出。',
+    infoText:'📦 訂貨以<strong>箱</strong>為單位，牛排鹽、青醬、天婦羅碎、義式香蒜醬、餐包等以<strong>包</strong>為單位，哈密瓜糖漿以<strong>罐</strong>為單位。<br>⏰ 請於週一上午 10:00 前送出，超時請在 LINE 群組告知。',
     breadNotice:'🍞 <strong>海鹽奶油餐包</strong>為代訂商品：<strong>本週一下單 → 下週四配送</strong>。',
     submittedBanner:'✅ 本週已送出訂單，如需修改請聯絡總部',
     submittedBannerEditable:'✅ 本週已送出訂單，截止前可按下方「解鎖修改」自行調整',
@@ -534,6 +534,8 @@ const T = {
     tagSpecial:'代訂', tagUnit:'單位：', tagStockUnit:'盤點：', tagOrderUnit:'訂貨：',
     btnSubmit:'送出訂單', btnSubmitting:'送出中…', btnSubmitted:'已送出', btnBack:'返回主頁',
     successTitle:'訂單送出成功！', toastStore:'請先選擇門市',
+    successBreadNote:'此為代訂商品，將於下週四（{date}）配送',
+    successLastWeekBread:'🍞 上週訂購的餐包 {qty} 包，將隨本次貨物於{date}一併送達',
     toastName:'請輸入訂貨人姓名', toastItem:'請至少訂一項商品', toastFail:'❌ 送出失敗，請重試',
     historyEmpty:'請先選擇門市以查看紀錄', historyNone:'尚無訂貨紀錄', historyLoading:'⏳ 載入中…',
     historyBy:'提交：', historyStock:'盤點', historyOrder:'訂',
@@ -585,7 +587,7 @@ const T = {
     labelStore:'店舗', labelName:'発注担当者名', placeholderStore:'店舗を選択…', placeholderName:'お名前を入力',
     regularLabel:'📦 通常商品 納品日', regularNote:'今週木曜日に配送',
     breadLabel:'🍞 塩バターロール 納品日', breadNote:'来週木曜日（1週間前に発注）',
-    infoText:'発注単位は主に<strong>箱</strong>です。ステーキソルト等は<strong>袋</strong>単位です。<br>⏰ 月曜10:00までにご送信ください。',
+    infoText:'📦 発注は<strong>箱</strong>単位です。ステーキソルト、手作りジェノベーゼ、天かす、ガーリックオイルソース、塩バターロール等は<strong>袋</strong>単位、グリーンメロンシロップは<strong>缶</strong>単位です。<br>⏰ 月曜10:00までにご送信ください。締め切りを過ぎた場合はLINEグループにてご連絡ください。',
     breadNotice:'🍞 <strong>塩バターロール</strong>は代理注文商品：<strong>今週月曜発注 → 来週木曜配送</strong>。1週間前の発注が必要です！',
     submittedBanner:'✅ 今週の発注を送信済みです。変更はご連絡ください。',
     submittedBannerEditable:'✅ 今週の発注を送信済みです。締め切り前なら下の「ロック解除」で編集できます',
@@ -594,6 +596,8 @@ const T = {
     tagSpecial:'代理注文', tagUnit:'単位：', tagStockUnit:'在庫：', tagOrderUnit:'発注：',
     btnSubmit:'発注を送信', btnSubmitting:'送信中…', btnSubmitted:'送信済み', btnBack:'トップへ戻る',
     successTitle:'発注が完了しました！', toastStore:'店舗を選択してください',
+    successBreadNote:'代理注文商品のため、来週木曜（{date}）に配送されます',
+    successLastWeekBread:'🍞 先週ご注文のパン {qty} 個は、今回の貨物（{date}）に同梱されます',
     toastName:'担当者名を入力してください', toastItem:'商品を1つ以上選択してください', toastFail:'❌ 送信に失敗しました',
     historyEmpty:'店舗を選択して履歴を確認', historyNone:'発注履歴がありません', historyLoading:'⏳ 読み込み中…',
     historyBy:'担当者：', historyStock:'在庫', historyOrder:'発注',
@@ -1502,16 +1506,28 @@ async function submitOrder() {
 
   const thisMonday = getOrderWeekMonday();
   const del = getThursday(thisMonday, 0);
+  const nextDel = getThursday(thisMonday, 1);
   const { boxes } = calcEstimatedBoxes();
   document.getElementById('pageOrder').style.display = 'none';
   document.getElementById('summaryBar').style.display = 'none';
   document.getElementById('hSuccess').textContent = t('successTitle');
-  document.getElementById('successDetail').innerHTML =
+  let detailHtml =
     `<strong>${currentStore}</strong>　${submitterName}<br>${fmtDate(del)}　<strong>${boxes} 箱</strong><br><br>` +
     ordered.map(p=>{
       const dn = currentLang==='ja'&&PRODUCT_NAMES_JA[p.id]?PRODUCT_NAMES_JA[p.id]:p.name;
-      return `${dn} × ${orderData[p.id].order} ${p.unit}${p.special?' 🍞':''}`;
+      // 餐包為代訂商品，本次下單的數量是「下週」才配送，需另外標示配送時間
+      const breadNote = p.special
+        ? `<br><span style="color:#7c3aed;font-size:12px">${t('successBreadNote').replace('{date}', fmtDate(nextDel))}</span>`
+        : '';
+      return `${dn} × ${orderData[p.id].order} ${p.unit}${p.special?' 🍞':''}${breadNote}`;
     }).join('<br>');
+  // 上週訂購的餐包，會隨本次貨物一併送達（本週四）
+  if (lastWeekBreadQty > 0) {
+    detailHtml += `<div style="margin-top:10px;padding:8px 12px;background:#eff6ff;border:1.5px solid #2563eb;border-radius:8px;font-size:12px;color:#1d4ed8;text-align:left">` +
+      t('successLastWeekBread').replace('{qty}', lastWeekBreadQty).replace('{date}', fmtDate(del)) +
+      `</div>`;
+  }
+  document.getElementById('successDetail').innerHTML = detailHtml;
   document.getElementById('btnBack').textContent = t('btnBack');
   document.getElementById('successScreen').classList.add('show');
 }
