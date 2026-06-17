@@ -1149,6 +1149,7 @@ function _calcBoxesByCat(data, cat) {
   let looseFraction = 0;
   PRODUCTS.forEach(p => {
     if (p.special) return; // 代訂餐包不計
+    if (p.noBox) return;   // noBox 品項不計箱（如綠哈密瓜糖漿）
     if (cat && p.cat !== cat) return;
     const qty = (data[p.id]?.order) || 0;
     if (!qty) return;
