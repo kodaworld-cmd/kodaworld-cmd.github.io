@@ -940,8 +940,9 @@ function renderStats() {
 
   // 正確總箱數：各門市個別換算後加總（散裝品項 perBox 換算，牛排鹽/哈密瓜不計）
   // 再加上本週出貨的餐包（上週已訂，用 calcBreadBoxes 換算）
+  // 餐包per店ceil後加總（與門市明細合計列邏輯一致，不可跨門市合箱）
   const totalShipBoxes = allOrders.reduce((sum, o) => sum + calcOrderBoxes(o.data || {}), 0)
-                       + calcBreadBoxes(breadToShip);
+                       + lastWeekOrders.reduce((sum, o) => sum + calcBreadBoxes(o.data?.[1367]?.order || 0), 0);
 
   document.getElementById('sSubmitted').textContent = submitted;
   document.getElementById('sPending').textContent   = activeMaster.length - submitted;
