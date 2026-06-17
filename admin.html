@@ -1248,17 +1248,22 @@ function renderLogistics() {
   const activeMaster=_sortStores(getActiveStoreMaster());
 
   let frozenGrand=0, ambientGrand=0, totalGrand=0;
+  let storesWithOrder=0;
   const rows=activeMaster.map(sm=>{
     const o=orderMap[sm.key];
-    if (!o) return `<tr><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
-    const data=o.data||{};
-    const frozen = calcCatBoxes(data, '冷凍');
-    const ambient = calcCatBoxes(data, '常温');
-    const total=frozen+ambient;
+    const oLast=lastMap[sm.key];
+    const data=o?.data||{};
+    const frozen = o ? calcCatBoxes(data, '冷凍') : 0;
+    const ambient = o ? calcCatBoxes(data, '常温') : 0;
+    const breadBoxes = calcBreadBoxes(oLast?.data?.[1367]?.order||0);
+    const total=frozen+ambient+breadBoxes;
+    if (!total) return `<tr><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
     frozenGrand+=frozen; ambientGrand+=ambient; totalGrand+=total;
-    return `<tr><td><span class="region-badge">${sm.region}</span></td><td><strong>${sm.fullName||sm.key}</strong></td><td class="${frozen>0?'frozen-cell':'zero-cell'}">${frozen>0?frozen:'—'}</td><td class="${ambient>0?'ambient-cell':'zero-cell'}">${ambient>0?ambient:'—'}</td><td class="${total>0?'total-cell':'zero-cell'}">${total>0?total:'—'}</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
+    storesWithOrder++;
+    const totalLabel=total+(breadBoxes>0?`<span style="font-size:11px;color:#7c3aed;font-weight:600">（含餐包${breadBoxes}箱）</span>`:'');
+    return `<tr><td><span class="region-badge">${sm.region}</span></td><td><strong>${sm.fullName||sm.key}</strong></td><td class="${frozen>0?'frozen-cell':'zero-cell'}">${frozen>0?frozen:'—'}</td><td class="${ambient>0?'ambient-cell':'zero-cell'}">${ambient>0?ambient:'—'}</td><td class="${total>0?'total-cell':'zero-cell'}">${totalLabel}</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
   });
-  document.getElementById('logisticsBody').innerHTML=rows.join('')+`<tr class="total-row"><td colspan="2" style="font-weight:800">合計（${new Set(allOrders.map(o=>o.store_key)).size} 家門市）</td><td class="frozen-cell">${frozenGrand}</td><td class="ambient-cell">${ambientGrand}</td><td class="total-cell">${totalGrand}</td><td colspan="2"></td></tr>`;
+  document.getElementById('logisticsBody').innerHTML=rows.join('')+`<tr class="total-row"><td colspan="2" style="font-weight:800">合計（${storesWithOrder} 家門市）</td><td class="frozen-cell">${frozenGrand}</td><td class="ambient-cell">${ambientGrand}</td><td class="total-cell">${totalGrand}</td><td colspan="2"></td></tr>`;
 
   const wf=document.getElementById('weekFilter');
   const weekKey=wf.value;
@@ -3072,7 +3077,7 @@ init();
     var rows = ds.map(function(sm) {
       var o = orderMap[sm.key];
       if (!o) return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td>'+(sm.fullName||sm.key)+'</td><td class="zero-cell">-</td><td class="zero-cell">-</td><td class="zero-cell">-</td><td>'+sm.address+'</td><td>'+sm.phone+'</td></tr>';
-      var d=o.data||{}, f=fp.reduce(function(s,p){ return s+((d[p.id]&&d[p.id].order)||0); },0), a=ap.reduce(function(s,p){ return s+((d[p.id]&&d[p.id].order)||0); },0), t=f+a; tot+=t;
+      var d=o.data||{}, f=calcCatBoxes(d,'冷凍'), a=calcCatBoxes(d,'常温'), t=f+a; tot+=t;
       return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td><strong>'+(sm.fullName||sm.key)+'</strong></td>'
         +'<td class="'+(f>0?'frozen-cell':'zero-cell')+'">'+(f||'-')+'</td>'
         +'<td class="'+(a>0?'ambient-cell':'zero-cell')+'">'+(a||'-')+'</td>'
