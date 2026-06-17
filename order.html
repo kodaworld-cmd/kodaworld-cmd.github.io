@@ -1483,9 +1483,9 @@ async function submitOrder() {
   const submitterName = document.getElementById('submitterName').value.trim();
   if (!submitterName) { showToast(t('toastName')); document.getElementById('submitterName').focus(); return; }
 
-  // 截止時間警示（週一 10:00 後）
-  const _now = new Date();
-  if (_now.getDay() === 1 && _now.getHours() >= 10) {
+  // 截止時間警示（週一 10:00 後 ＋ 週二、三、四，與 checkDeadline 邏輯一致）
+  const _now = new Date(); const _day = _now.getDay(); const _hour = _now.getHours();
+  if ((_day === 1 && _hour >= 10) || _day === 2 || _day === 3 || _day === 4) {
     const go = await showDeadlineWarning();
     if (!go) return;
   }
