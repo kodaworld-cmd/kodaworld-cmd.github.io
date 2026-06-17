@@ -930,8 +930,6 @@ function renderStats() {
   const submitted = new Set(allOrders.map(o=>o.store_key)).size;
   const totals = {};
   allOrders.forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { totals[id]=(totals[id]||0)+(d.order||0); }));
-  const frozenTotal  = PRODUCTS.filter(p=>p.cat==='冷凍').reduce((s,p)=>s+(totals[p.id]||0),0);
-  const ambientTotal = PRODUCTS.filter(p=>p.cat==='常温').reduce((s,p)=>s+(totals[p.id]||0),0);
 
   const lastTotals = {};
   lastWeekOrders.forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { lastTotals[id]=(lastTotals[id]||0)+(d.order||0); }));
@@ -940,10 +938,15 @@ function renderStats() {
   const storesWithBread = allOrders.filter(o=>(o.data?.[1367]?.order||0)>0).length;
   const activeMaster = getActiveStoreMaster();
 
+  // 正確總箱數：各門市個別換算後加總（散裝品項 perBox 換算，牛排鹽/哈密瓜不計）
+  // 再加上本週出貨的餐包（上週已訂，用 calcBreadBoxes 換算）
+  const totalShipBoxes = allOrders.reduce((sum, o) => sum + calcOrderBoxes(o.data || {}), 0)
+                       + calcBreadBoxes(breadToShip);
+
   document.getElementById('sSubmitted').textContent = submitted;
   document.getElementById('sPending').textContent   = activeMaster.length - submitted;
-  document.getElementById('sFrozen').textContent    = frozenTotal;
-  document.getElementById('sAmbient').textContent   = ambientTotal;
+  document.getElementById('sFrozen').textContent    = totalShipBoxes;
+  document.getElementById('sAmbient').textContent   = 0; // 保留元素，數值由 totalShipBoxes 統一呈現
 
   const wf = document.getElementById('weekFilter');
   const weekKey = wf.value;
