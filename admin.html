@@ -892,7 +892,8 @@ async function startAdmin() {
     cachedStoreOrder   = soRes.data?.value || [];
   } catch(e) { console.warn('Settings load error', e); }
 
-  await Promise.all([loadData(), loadProductSettings()]);
+  await loadProductSettings(); // 先建立 PRODUCTS 排序與 LOOSE_BOX，再跑 renderAll
+  await loadData();
   applyRoleRestrictions();
   // 登入時即載入異常案件並顯示「待處理」徽章，不需等到點選「異常處理」頁籤
   // 同時載入帳號列表並顯示「尚未指派門市」的新申請帳號徽章
