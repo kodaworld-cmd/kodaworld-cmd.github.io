@@ -445,28 +445,29 @@ let sb;
 // 商品資料
 // ========================
 const DEFAULT_PRODUCTS = [
-  { id: 792,  name: '大阪燒',               unit: '箱', stockUnit: '片',   cat: '冷凍' },
-  { id: 984,  name: '馬鈴薯燉肉',           unit: '箱', stockUnit: '人份', cat: '冷凍' },
-  { id: 908,  name: '韓式拌飯醬（360g/袋）', unit: '箱', stockUnit: '袋',   cat: '冷凍' },
-  { id: 1047, name: '冷凍義大利麵',          unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 251,  name: '壽喜燒醬（1000克/包）', unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 1198, name: '紅椒包 250g/包',        unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 1199, name: '黃椒包 250g/包',        unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 1161, name: '手作五花叉燒',          unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 735,  name: '咖哩醬（150克/包）',    unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 262,  name: '北海道白醬',            unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 261,  name: '南瓜湯',                unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 1154, name: '起司醬',                unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 1254, name: '拿坡里醬',              unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 1050, name: '義式香蒜醬',            unit: '包', stockUnit: '包',   cat: '冷凍', minQty: 10, step: 10 },
-  { id: 1214, name: '1/2咖哩醬',             unit: '箱', stockUnit: '包',   cat: '冷凍' },
-  { id: 1282, name: '北海道燉菜',            unit: '箱', stockUnit: '人份', cat: '冷凍' },
-  { id: 1283, name: '手作青醬（140g/包）',   unit: '包', stockUnit: '包',   cat: '冷凍', minQty: 10, step: 10 },
-  { id: 1315, name: '天婦羅蝦',              unit: '箱', stockUnit: '支',   cat: '冷凍' },
-  { id: 1368, name: '天婦羅碎 500g/包',      unit: '包', stockUnit: '包',   cat: '冷凍' },
-  { id: 1051, name: '牛排鹽',                unit: '包', stockUnit: '包',   cat: '常温', minQty: 5, step: 5 },
-  { id: 1142, name: '綠哈密瓜糖漿 2.5KG',   unit: '罐', stockUnit: '罐',   cat: '常温', noBox: true },
-  { id: 1367, name: '海鹽奶油餐包 12個±2/包', unit: '包', stockUnit: '包', cat: '代訂', special: true },
+  // perBoxQty：每箱內容數量；perBoxUnit：內容單位（供門市人員參考，> 1 時顯示於商品卡片）
+  { id: 792,  name: '大阪燒',               unit: '箱', stockUnit: '片',   cat: '冷凍', perBoxQty: 40,  perBoxUnit: '片' },
+  { id: 984,  name: '馬鈴薯燉肉',           unit: '箱', stockUnit: '人份', cat: '冷凍', perBoxQty: 40,  perBoxUnit: '人份' },
+  { id: 908,  name: '韓式拌飯醬（360g/袋）', unit: '箱', stockUnit: '袋',   cat: '冷凍', perBoxQty: 50,  perBoxUnit: '袋' },
+  { id: 1047, name: '冷凍義大利麵',          unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 60,  perBoxUnit: '包' },
+  { id: 251,  name: '壽喜燒醬（1000克/包）', unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 15,  perBoxUnit: '包' },
+  { id: 1198, name: '紅椒包 250g/包',        unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 20,  perBoxUnit: '包' },
+  { id: 1199, name: '黃椒包 250g/包',        unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 20,  perBoxUnit: '包' },
+  { id: 1161, name: '手作五花叉燒',          unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 15,  perBoxUnit: '包' },
+  { id: 735,  name: '咖哩醬（150克/包）',    unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 100, perBoxUnit: '包' },
+  { id: 262,  name: '北海道白醬',            unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 100, perBoxUnit: '包' },
+  { id: 261,  name: '南瓜湯',                unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 80,  perBoxUnit: '包' },
+  { id: 1154, name: '起司醬',                unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 100, perBoxUnit: '包' },
+  { id: 1254, name: '拿坡里醬',              unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 150, perBoxUnit: '包' },
+  { id: 1050, name: '義式香蒜醬',            unit: '包', stockUnit: '包',   cat: '冷凍', perBoxQty: 200, perBoxUnit: '包', minQty: 10, step: 10 },
+  { id: 1214, name: '1/2咖哩醬',             unit: '箱', stockUnit: '包',   cat: '冷凍', perBoxQty: 200, perBoxUnit: '包' },
+  { id: 1282, name: '北海道燉菜',            unit: '箱', stockUnit: '人份', cat: '冷凍', perBoxQty: 40,  perBoxUnit: '人份' },
+  { id: 1283, name: '手作青醬（140g/包）',   unit: '包', stockUnit: '包',   cat: '冷凍', perBoxQty: 100, perBoxUnit: '包', minQty: 10, step: 10 },
+  { id: 1315, name: '天婦羅蝦',              unit: '箱', stockUnit: '支',   cat: '冷凍', perBoxQty: 100, perBoxUnit: '支' },
+  { id: 1368, name: '天婦羅碎 500g/包',      unit: '包', stockUnit: '包',   cat: '冷凍', perBoxQty: 10,  perBoxUnit: '包' },
+  { id: 1051, name: '牛排鹽',                unit: '包', stockUnit: '包',   cat: '常温', perBoxQty: 1,   perBoxUnit: '包', minQty: 5, step: 5 },
+  { id: 1142, name: '綠哈密瓜糖漿 2.5KG',   unit: '罐', stockUnit: '罐',   cat: '常温', perBoxQty: 1,   perBoxUnit: '罐', noBox: true },
+  { id: 1367, name: '海鹽奶油餐包 12個±2/包', unit: '包', stockUnit: '包', cat: '代訂', perBoxQty: 6,   perBoxUnit: '包', special: true },
 ];
 let PRODUCTS = [...DEFAULT_PRODUCTS];
 
@@ -807,6 +808,7 @@ let isSubmitted = false;
 let canUnlockCurrent = false; // 目前帳號是否可解鎖修改本週訂單（影響 submittedBanner 文字）
 let lastWeekBreadQty = 0;    // 上週餐包訂購量（本週隨貨出貨）
 let minBoxesSettings = {};   // { store_key: 最低箱數 }
+let perBoxSettings = {};     // { productId: 每箱數量 }（從後台品項設定讀取）
 let inventoryOnly = false;   // 只盤點模式
 let lastSubmittedOrder = null; // 送出成功畫面所需資料（供切換語言時重新渲染）
 
@@ -1007,15 +1009,17 @@ async function initMainApp(user, assignedStores) {
   const ss = document.getElementById('storeSelect');
   ss.innerHTML = '<option value="" id="optPlaceholderStore">選擇門市…</option>';
   try {
-    const [{ data: customStores }, { data: dsData }, { data: mbData }, { data: cpData }, { data: ddpData }, { data: poData }] = await Promise.all([
+    const [{ data: customStores }, { data: dsData }, { data: mbData }, { data: cpData }, { data: ddpData }, { data: poData }, { data: pbData }] = await Promise.all([
       sb.from('custom_stores').select('code, key, is_active'),
       sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
       sb.from('settings').select('value').eq('key','min_boxes_settings').maybeSingle(),
       sb.from('custom_products').select('*').order('id'),
       sb.from('settings').select('value').eq('key','disabled_default_products').maybeSingle(),
       sb.from('settings').select('value').eq('key','product_sort_order').maybeSingle(),
+      sb.from('settings').select('value').eq('key','per_box_settings').maybeSingle(),
     ]);
     minBoxesSettings = mbData?.value || {};
+    perBoxSettings = pbData?.value || {};
     const disabled = dsData?.value || [];
     const disabledDefaults = ddpData?.value || [];
     const productSortOrder = poData?.value || [];
@@ -1032,6 +1036,7 @@ async function initMainApp(user, assignedStores) {
       id: p.id, name: p.name, unit: p.unit || '箱', stockUnit: p.stock_unit || p.unit || '包',
       cat: p.cat || '冷凍', special: p.special || false, noBox: p.no_box || false,
       minQty: p.min_qty > 1 ? p.min_qty : undefined, step: p.step > 1 ? p.step : (p.min_qty > 1 ? p.min_qty : undefined),
+      perBoxQty: p.loose_box_qty > 1 ? p.loose_box_qty : undefined, perBoxUnit: p.stock_unit || p.unit,
     }));
     // 排序：優先使用後台設定的自訂順序，否則依 DEFAULT_PRODUCTS 原始順序
     const refOrder = productSortOrder.length ? productSortOrder : DEFAULT_PRODUCTS.map(p => p.id);
@@ -1248,7 +1253,7 @@ function renderProducts() {
         <div class="prod-row">
           <div>
             <div class="prod-name">${displayName}${isSpecial?`<span class="special-tag">${t('tagSpecial')}</span>`:''}</div>
-            <div class="prod-meta"><span class="prod-code">#${p.id}</span> · ${t('tagOrderUnit')}${p.unit}　${t('tagStockUnit')}${p.stockUnit||p.unit}${p.minQty?`　<span style="color:#d97706;font-weight:700">最低${p.minQty}${p.step&&p.step>1?`，${p.step}的倍數`:''}</span>`:''}</div>
+            <div class="prod-meta"><span class="prod-code">#${p.id}</span>${(()=>{const q=perBoxSettings[p.id]??p.perBoxQty??1;const su=p.stockUnit||p.unit;const isLoose=LOOSE_BOX_DEFAULT.hasOwnProperty(p.id)||p.noBox;return (q>1&&!isLoose)?` · <span style="color:#0369a1;font-weight:700">每${p.unit} ${q} ${su}</span>`:'';})()}${p.minQty?`　<span style="color:#d97706;font-weight:700">最低${p.minQty}${p.step&&p.step>1?`，${p.step}的倍數`:''}</span>`:''}</div>
           </div>
           <div class="input-group">
             <div class="input-label-sm">${t('tagStockUnit')}${p.stockUnit||p.unit}</div>
