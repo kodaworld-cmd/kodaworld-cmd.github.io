@@ -980,12 +980,17 @@ async function init() {
       ]);
       const disabled = dsData?.value || [];
       const storeKeyOverrides = skData?.value || {};
+      // 停用清單可能還存著舊名，改用代號集合判斷更可靠
+      const disabledCodes = new Set(disabled.map(k => STORE_CODES_MAP[k]).filter(Boolean));
       // 套用後台 key override（後台改名後前台同步更新）
       const effectiveRegMap = {};
       Object.entries(STORE_CODES_MAP).forEach(([key, code]) => {
         effectiveRegMap[storeKeyOverrides[code] || key] = code;
       });
-      Object.keys(effectiveRegMap).filter(key => !disabled.includes(key)).forEach(key => {
+      Object.keys(effectiveRegMap).filter(key => {
+        const code = effectiveRegMap[key];
+        return !disabled.includes(key) && !disabledCodes.has(code);
+      }).forEach(key => {
         const o = document.createElement('option');
         o.value = key; o.textContent = `${effectiveRegMap[key]} ${key}`;
         regSel.appendChild(o);
