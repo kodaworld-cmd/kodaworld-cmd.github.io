@@ -970,14 +970,21 @@ async function init() {
   const regSel = document.getElementById('regStore');
   if (regSel) {
     try {
-      const [{ data: dsData }, { data: customStores }] = await Promise.all([
+      const [{ data: dsData }, { data: customStores }, { data: skData }] = await Promise.all([
         sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
         sb.from('custom_stores').select('code, key, is_active'),
+        sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle(),
       ]);
       const disabled = dsData?.value || [];
-      Object.keys(STORE_CODES_MAP).filter(key => !disabled.includes(key)).forEach(key => {
+      const storeKeyOverrides = skData?.value || {};
+      // 套用後台 key override（後台改名後前台同步更新）
+      const effectiveRegMap = {};
+      Object.entries(STORE_CODES_MAP).forEach(([key, code]) => {
+        effectiveRegMap[storeKeyOverrides[code] || key] = code;
+      });
+      Object.keys(effectiveRegMap).filter(key => !disabled.includes(key)).forEach(key => {
         const o = document.createElement('option');
-        o.value = key; o.textContent = `${STORE_CODES_MAP[key]} ${key}`;
+        o.value = key; o.textContent = `${effectiveRegMap[key]} ${key}`;
         regSel.appendChild(o);
       });
       (customStores || []).filter(s => s.is_active && !disabled.includes(s.key)).forEach(s => {
