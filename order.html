@@ -973,40 +973,37 @@ async function init() {
   const regSel = document.getElementById('regStore');
   if (regSel) {
     try {
-      const [{ data: dsData }, { data: customStores }, { data: dscData }, { data: skData }] = await Promise.all([
+      const [{ data: dsData }, { data: customStores }, { data: skData }] = await Promise.all([
         sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
         sb.from('custom_stores').select('code, key, is_active'),
-        sb.from('settings').select('value').eq('key','disabled_store_codes').maybeSingle(),
         sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle(),
       ]);
-      const disabledNames = new Set(dsData?.value || []);
+      const disabledNameArr = dsData?.value || [];
       const storeKeyOverrides = skData?.value || {};
 
-      // 建立 name→code 對照表（原始名稱 + 所有改名後名稱）
+      // 建立「任意名稱 → 代號」對照表（原始名稱 + 後台改名後名稱都納入）
       const nameToCode = {};
       Object.entries(STORE_CODES_MAP).forEach(([origName, code]) => {
         nameToCode[origName] = code;
-        const renamedKey = storeKeyOverrides[code];
-        if (renamedKey) nameToCode[renamedKey] = code;
+        const renamedName = storeKeyOverrides[code];
+        if (renamedName) nameToCode[renamedName] = code;
       });
 
-      // 從 disabled_store_codes 取得停用代號（優先）；若不存在則從 disabled_stores 名稱轉換
-      const disabledCodes = new Set(dscData?.value || []);
-      if (disabledCodes.size === 0) {
-        disabledNames.forEach(name => {
-          const code = nameToCode[name];
-          if (code) disabledCodes.add(code);
+      // 將停用名單全部轉成代號集合（不管是原始名稱還是改名後都能對應）
+      const disabledCodes = new Set(
+        disabledNameArr.map(name => nameToCode[name]).filter(Boolean)
+      );
+
+      // 只顯示未停用的門市
+      Object.entries(STORE_CODES_MAP)
+        .filter(([, code]) => !disabledCodes.has(code))
+        .forEach(([key, code]) => {
+          const o = document.createElement('option');
+          o.value = key; o.textContent = `${code} ${key}`;
+          regSel.appendChild(o);
         });
-      }
-
-      const isDisabledCode = code => disabledCodes.has(code);
-      Object.entries(STORE_CODES_MAP).filter(([key, code]) => !isDisabledCode(code))
-      .forEach(([key, code]) => {
-        const o = document.createElement('option');
-        o.value = key; o.textContent = `${code} ${key}`;
-        regSel.appendChild(o);
-      });
-      (customStores || []).filter(s => s.is_active && !disabled.has(s.key)).forEach(s => {
+      const disabledNameSet = new Set(disabledNameArr);
+      (customStores || []).filter(s => s.is_active && !disabledNameSet.has(s.key)).forEach(s => {
         const o = document.createElement('option');
         o.value = s.key; o.textContent = `${s.code} ${s.key}`;
         regSel.appendChild(o);
