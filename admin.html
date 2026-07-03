@@ -901,8 +901,14 @@ async function startAdmin() {
     // 自動同步停用代號清單（供前台 order.html 用，不受改名影響）
     try {
       const effMaster = getEffectiveStoreMaster();
-      const dsCodes = cachedDisabledStores
-        .map(k => (effMaster.find(s => s.key === k) || {}).code).filter(Boolean);
+      const dsCodes = cachedDisabledStores.map(k => {
+        // 先比對有效 key（改名後），再比對原始 key（改名前）
+        const byEff  = effMaster.find(s => s.key === k);
+        if (byEff) return byEff.code;
+        const byOrig = STORE_MASTER_DEFAULT.find(s => s.key === k);
+        if (byOrig) return byOrig.code;
+        return null;
+      }).filter(Boolean);
       sb.from('settings').upsert({ key:'disabled_store_codes', value:dsCodes, updated_at:new Date().toISOString() });
     } catch(e) {}
   } catch(e) { console.warn('Settings load error', e); }
@@ -1455,9 +1461,14 @@ async function toggleStore(key) {
   let newDisabled;
   if (isDisabled) { newDisabled = cachedDisabledStores.filter(k=>k!==key); }
   else { newDisabled = [...cachedDisabledStores, key]; }
-  // 同步計算代號版停用清單
+  // 同步計算代號版停用清單（有效key和原始key都查）
   const effMaster = getEffectiveStoreMaster();
-  const newDisabledCodes = newDisabled.map(k => (effMaster.find(s=>s.key===k)||{}).code).filter(Boolean);
+  const newDisabledCodes = newDisabled.map(k => {
+    const byEff  = effMaster.find(s => s.key === k);
+    if (byEff) return byEff.code;
+    const byOrig = STORE_MASTER_DEFAULT.find(s => s.key === k);
+    return byOrig ? byOrig.code : null;
+  }).filter(Boolean);
   const { error } = await sb.from('settings').upsert([
     { key:'disabled_stores', value:newDisabled, updated_at:new Date().toISOString() },
     { key:'disabled_store_codes', value:newDisabledCodes, updated_at:new Date().toISOString() }
