@@ -1408,11 +1408,14 @@ async function saveStoreEdit(key) {
       { key: 'store_info_overrides', value: cachedStoreOverrides, updated_at: new Date().toISOString() },
       { onConflict: 'key' }
     ));
-    // 若顯示名稱有變動，寫入 store_key_overrides（code → displayKey）
-    if (displayKey !== master.code) { // always save to keep single source
-      cachedStoreKeyOverrides[master.code] = displayKey;
+    // 寫入 store_key_overrides（code → displayKey）
+    // 先從 DB 重新讀取，避免初始化失敗時用空物件覆蓋掉既有資料
+    {
+      const { data: freshSk } = await sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle();
+      const merged = { ...(freshSk?.value || {}), ...cachedStoreKeyOverrides, [master.code]: displayKey };
+      cachedStoreKeyOverrides = merged;
       saves.push(sb.from('settings').upsert(
-        { key: 'store_key_overrides', value: cachedStoreKeyOverrides, updated_at: new Date().toISOString() },
+        { key: 'store_key_overrides', value: merged, updated_at: new Date().toISOString() },
         { onConflict: 'key' }
       ));
     }
@@ -2216,6 +2219,12 @@ function setUserBadge(count) {
 // ========================
 // 帳號管理
 // ========================
+// 歷史舊名對照（申請時使用的舊名 → 現在的正式名稱）
+const LEGACY_KEY_MAP = {
+  '南投家樂福':'南投萬家福店','土城家樂福':'土城萬家福店',
+  '新店家樂福':'新店萬家福店','宜蘭家樂福':'宜蘭萬家福店',
+  '內壢家樂福':'內壢萬家福店','嘉義家樂福':'嘉義萬家福店',
+};
 const ALL_STORE_KEYS = [
   '台中米平方','土城日月光','高雄成功','台南中正','台北內湖','龜山文青',
   '台南安平','土城萬家福店','台南新仁','桃園經國','台南仁德','高雄新楠',
@@ -2237,8 +2246,8 @@ async function loadUserList() {
     setUserBadge(0);
     return;
   }
-  // 建立舊 key → 新 key 的正規化對照表（後台改名後舊記錄自動合併）
-  const oldToCurrentKey = {};
+  // 建立舊 key → 新 key 的正規化對照表（含歷史舊名與後台改名）
+  const oldToCurrentKey = { ...LEGACY_KEY_MAP };
   STORE_MASTER_DEFAULT.forEach(s => {
     const cur = cachedStoreKeyOverrides[s.code];
     if (cur && cur !== s.key) oldToCurrentKey[s.key] = cur;
