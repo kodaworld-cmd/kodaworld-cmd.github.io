@@ -978,32 +978,18 @@ async function init() {
         sb.from('custom_stores').select('code, key, is_active'),
         sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle(),
       ]);
-      const disabledNameArr = dsData?.value || [];
+      const disabledNames = new Set(dsData?.value || []);
       const storeKeyOverrides = skData?.value || {};
 
-      // 建立「任意名稱 → 代號」對照表（原始名稱 + 後台改名後名稱都納入）
-      const nameToCode = {};
-      Object.entries(STORE_CODES_MAP).forEach(([origName, code]) => {
-        nameToCode[origName] = code;
-        const renamedName = storeKeyOverrides[code];
-        if (renamedName) nameToCode[renamedName] = code;
+      // 只顯示未停用的門市（effectiveKey = 改名後名稱，與後台指派保持一致）
+      Object.entries(STORE_CODES_MAP).forEach(([origKey, code]) => {
+        const effectiveKey = storeKeyOverrides[code] || origKey;
+        if (disabledNames.has(effectiveKey)) return;
+        const o = document.createElement('option');
+        o.value = effectiveKey; o.textContent = `${code} ${effectiveKey}`;
+        regSel.appendChild(o);
       });
-
-      // 將停用名單全部轉成代號集合（不管是原始名稱還是改名後都能對應）
-      const disabledCodes = new Set(
-        disabledNameArr.map(name => nameToCode[name]).filter(Boolean)
-      );
-
-      // 只顯示未停用的門市
-      Object.entries(STORE_CODES_MAP)
-        .filter(([, code]) => !disabledCodes.has(code))
-        .forEach(([key, code]) => {
-          const o = document.createElement('option');
-          o.value = key; o.textContent = `${code} ${key}`;
-          regSel.appendChild(o);
-        });
-      const disabledNameSet = new Set(disabledNameArr);
-      (customStores || []).filter(s => s.is_active && !disabledNameSet.has(s.key)).forEach(s => {
+      (customStores || []).filter(s => s.is_active && !disabledNames.has(s.key)).forEach(s => {
         const o = document.createElement('option');
         o.value = s.key; o.textContent = `${s.code} ${s.key}`;
         regSel.appendChild(o);
@@ -1071,11 +1057,8 @@ async function initMainApp(user, assignedStores) {
       return ai - bi;
     });
 
-    // 套用後台門市顯示名稱 override（code → displayKey），並同步更新 STORE_CODES_MAP
-    const storeKeyOverrides = skData?.value || {}; // { '00011': '新名稱', ... }
-    Object.entries(storeKeyOverrides).forEach(([code, newKey]) => {
-      if (STORE_CODES_MAP[newKey] === undefined) STORE_CODES_MAP[newKey] = code; // 加入新 key
-    });
+    // 套用後台門市顯示名稱 override（code → displayKey）
+    const storeKeyOverrides = skData?.value || {};
 
     // 預設門市（套用後台 key overrides）
     const defaultStores = [
