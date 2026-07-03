@@ -2283,10 +2283,12 @@ async function loadUserList() {
            ${['store','viewer','manager','admin'].map(r=>`<option value="${r}" ${userRole===r?'selected':''}>${roleLabel(r)}</option>`).join('')}
          </select>`
       : roleBadge(userRole);
-    // 申請門市
+    // 申請門市（比對時需同時考慮舊key與正規化後的新key）
+    const reqNorm = oldToCurrentKey[p.requested_store] || p.requested_store;
+    const reqAssigned = stores.includes(reqNorm) || stores.includes(p.requested_store);
     const reqStore = p.requested_store
       ? `<span style="background:#faf5ff;border:1.5px solid #c4b5fd;border-radius:8px;padding:2px 8px;font-size:12px;font-weight:700;color:var(--special)">${p.requested_store}
-          ${isSuperAdmin && !stores.includes(p.requested_store) ? `<button onclick="grantRequestedStore('${p.id}','${p.requested_store}')" style="background:var(--special);color:#fff;border:none;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;cursor:pointer;margin-left:2px">指派</button>` : (stores.includes(p.requested_store) ? ' ✓' : '')}
+          ${isSuperAdmin && !reqAssigned ? `<button onclick="grantRequestedStore('${p.id}','${reqNorm}')" style="background:var(--special);color:#fff;border:none;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;cursor:pointer;margin-left:2px">指派</button>` : (reqAssigned ? ' ✓' : '')}
          </span>`
       : '<span style="color:#cbd5e0;font-size:11px">未填</span>';
     return `<tr>
