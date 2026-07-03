@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>手作出貨彙整後台</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -2234,10 +2237,17 @@ async function loadUserList() {
     setUserBadge(0);
     return;
   }
+  // 建立舊 key → 新 key 的正規化對照表（後台改名後舊記錄自動合併）
+  const oldToCurrentKey = {};
+  STORE_MASTER_DEFAULT.forEach(s => {
+    const cur = cachedStoreKeyOverrides[s.code];
+    if (cur && cur !== s.key) oldToCurrentKey[s.key] = cur;
+  });
   const accessMap = {};
   (accesses||[]).forEach(a => {
     if (!accessMap[a.user_id]) accessMap[a.user_id] = [];
-    accessMap[a.user_id].push(a.store_key);
+    const normalized = oldToCurrentKey[a.store_key] || a.store_key;
+    if (!accessMap[a.user_id].includes(normalized)) accessMap[a.user_id].push(normalized);
   });
   // 新申請帳號（店家角色、尚未指派任何門市）數量 → 帳號管理徽章
   const needAssignCount = profiles.filter(p => {
@@ -2245,9 +2255,10 @@ async function loadUserList() {
     return role === 'store' && (accessMap[p.id]||[]).length === 0;
   }).length;
   setUserBadge(needAssignCount);
-  // 只列啟用中門市（停用門市不出現在指派選單）
+  // 只列啟用中門市（套用 key override，停用門市不出現在指派選單）
+  const currentDefaultKeys = STORE_MASTER_DEFAULT.map(s => cachedStoreKeyOverrides[s.code] || s.key);
   const effectiveStores = [
-    ...ALL_STORE_KEYS.filter(k => !cachedDisabledStores.includes(k)),
+    ...currentDefaultKeys.filter(k => !cachedDisabledStores.includes(k)),
     ...cachedCustomStores.filter(s => s.is_active !== false && !cachedDisabledStores.includes(s.key)).map(s => s.key)
   ];
   const isSuperAdmin = currentAdminRole === 'admin';
@@ -3084,7 +3095,7 @@ init();
     if (!storeKey) return;
     if (storeKey === '__ALL__') {
       if (!confirm('確定一次指派所有門市給此使用者？')) return;
-      var eff = (typeof ALL_STORE_KEYS !== 'undefined' ? ALL_STORE_KEYS : []).concat((typeof cachedCustomStores !== 'undefined' ? cachedCustomStores : []).map(function(s){ return s.key; }));
+      var eff = STORE_MASTER_DEFAULT.map(function(s){ return cachedStoreKeyOverrides[s.code] || s.key; }).concat((typeof cachedCustomStores !== 'undefined' ? cachedCustomStores : []).map(function(s){ return s.key; }));
       var r0 = await sb.from('user_store_access').select('store_key').eq('user_id', userId);
       var has = new Set((r0.data || []).map(function(x){ return x.store_key; }));
       var toAdd = eff.filter(function(s){ return !has.has(s); }).map(function(s){ return { user_id: userId, store_key: s }; });
