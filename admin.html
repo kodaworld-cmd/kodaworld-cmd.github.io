@@ -898,6 +898,13 @@ async function startAdmin() {
     cachedStoreOverrides    = siRes.data?.value || {};
     cachedStoreKeyOverrides = skRes.data?.value || {};
     cachedStoreOrder        = soRes.data?.value || [];
+    // 自動同步停用代號清單（供前台 order.html 用，不受改名影響）
+    try {
+      const effMaster = getEffectiveStoreMaster();
+      const dsCodes = cachedDisabledStores
+        .map(k => (effMaster.find(s => s.key === k) || {}).code).filter(Boolean);
+      sb.from('settings').upsert({ key:'disabled_store_codes', value:dsCodes, updated_at:new Date().toISOString() });
+    } catch(e) {}
   } catch(e) { console.warn('Settings load error', e); }
 
   await loadProductSettings(); // 先建立 PRODUCTS 排序與 LOOSE_BOX，再跑 renderAll
@@ -1448,7 +1455,13 @@ async function toggleStore(key) {
   let newDisabled;
   if (isDisabled) { newDisabled = cachedDisabledStores.filter(k=>k!==key); }
   else { newDisabled = [...cachedDisabledStores, key]; }
-  const { error } = await sb.from('settings').upsert({ key:'disabled_stores', value:newDisabled, updated_at:new Date().toISOString() });
+  // 同步計算代號版停用清單
+  const effMaster = getEffectiveStoreMaster();
+  const newDisabledCodes = newDisabled.map(k => (effMaster.find(s=>s.key===k)||{}).code).filter(Boolean);
+  const { error } = await sb.from('settings').upsert([
+    { key:'disabled_stores', value:newDisabled, updated_at:new Date().toISOString() },
+    { key:'disabled_store_codes', value:newDisabledCodes, updated_at:new Date().toISOString() }
+  ]);
   if (!error) { cachedDisabledStores = newDisabled; renderStoreList(); renderAll(); }
 }
 

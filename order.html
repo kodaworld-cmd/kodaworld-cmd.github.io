@@ -973,18 +973,19 @@ async function init() {
   const regSel = document.getElementById('regStore');
   if (regSel) {
     try {
-      const [{ data: dsData }, { data: customStores }, { data: skData }] = await Promise.all([
+      const [{ data: dsData }, { data: customStores }, { data: dscData }] = await Promise.all([
         sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
         sb.from('custom_stores').select('code, key, is_active'),
-        sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle(),
+        sb.from('settings').select('value').eq('key','disabled_store_codes').maybeSingle(),
       ]);
       const disabled = new Set(dsData?.value || []);
-      const storeKeyOverrides = skData?.value || {};
-      // 建立「代號是否停用」的判斷表（同時考慮原始名稱與改名後名稱）
+      const disabledCodes = new Set(dscData?.value || []);
+      // 優先用代號判斷（最可靠），若代號清單尚未建立則用名稱備援
       const isDisabledCode = code => {
+        if (dscData !== null) return disabledCodes.has(code);
         const origKey = Object.keys(STORE_CODES_MAP).find(k => STORE_CODES_MAP[k] === code);
-        const newKey  = storeKeyOverrides[code];
-        return (origKey && disabled.has(origKey)) || (newKey && disabled.has(newKey));
+        if (!origKey) return false;
+        return disabled.has(origKey) || disabled.has(origKey + '店');
       };
       Object.entries(STORE_CODES_MAP).filter(([key, code]) => !isDisabledCode(code))
       .forEach(([key, code]) => {
