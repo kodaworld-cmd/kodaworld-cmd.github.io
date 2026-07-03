@@ -1413,8 +1413,18 @@ async function saveStoreEdit(key) {
         { onConflict: 'key' }
       ));
     }
-    // 若顯示名稱有變動，同步更新 user_store_access（避免已指派門市因改名失聯）
+    // 若顯示名稱有變動，同步更新排序清單與 user_store_access
     if (displayKey !== key) {
+      // 排序清單裡把舊名換成新名，位置不變
+      const orderIdx = cachedStoreOrder.indexOf(key);
+      if (orderIdx !== -1) {
+        cachedStoreOrder = [...cachedStoreOrder];
+        cachedStoreOrder[orderIdx] = displayKey;
+        saves.push(sb.from('settings').upsert(
+          { key: 'store_sort_order', value: cachedStoreOrder, updated_at: new Date().toISOString() },
+          { onConflict: 'key' }
+        ));
+      }
       saves.push(sb.from('user_store_access').update({ store_key: displayKey }).eq('store_key', key));
     }
     const results = await Promise.all(saves);
