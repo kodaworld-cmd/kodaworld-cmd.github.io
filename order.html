@@ -478,12 +478,12 @@ let LOOSE_BOX = { ...LOOSE_BOX_DEFAULT };
 // 門市代號對照
 const STORE_CODES_MAP = {
   '台中米平方':'00002','土城日月光':'00003','高雄成功':'00006','台南中正':'00007',
-  '台北內湖':'00008','龜山文青':'00009','台南安平':'00010','土城家樂福':'00011',
+  '台北內湖':'00008','龜山文青':'00009','台南安平':'00010','土城萬家福店':'00011',
   '台南新仁':'00012','桃園經國':'00013','台南仁德':'00014','高雄新楠':'00015',
-  '嘉義嘉義':'00016','台南新營':'00017','台南東門':'00018','台北車站':'00019',
-  '雲林斗六':'00020','宜蘭店':'00021','內壢':'00022','南投家樂福':'00023',
+  '嘉義萬家福店':'00016','台南新營':'00017','台南東門':'00018','台北車站':'00019',
+  '雲林斗六':'00020','宜蘭萬家福店':'00021','內壢萬家福店':'00022','南投萬家福店':'00023',
   '大樂':'00024','新店碧潭':'00025','台中西屯':'00026','台中文心':'00027',
-  '小港漢民':'00028','新店家樂福':'00029','大全聯':'00030','南投埔里':'00031',
+  '小港漢民':'00028','新店萬家福店':'00029','大全聯':'00030','南投埔里':'00031',
   '台中大里':'00032','台中青海':'00033','高雄光華':'00034','三重溪尾':'00036',
   '小碧潭京站':'00037',
 };
@@ -813,7 +813,7 @@ let inventoryOnly = false;   // 只盤點模式
 let lastSubmittedOrder = null; // 送出成功畫面所需資料（供切換語言時重新渲染）
 
 const MIN_BOXES_DEFAULT = 4;
-const MIN_BOXES_INIT = { '新店碧潭':6, '新店家樂福':6, '宜蘭店':6, '南投埔里':6, '南投家樂福':6 };
+const MIN_BOXES_INIT = { '新店碧潭':6, '新店萬家福店':6, '宜蘭萬家福店':6, '南投埔里':6, '南投萬家福店':6 };
 function getStoreMinBoxes() {
   const s = { ...MIN_BOXES_INIT, ...minBoxesSettings };
   return s[currentStore] ?? MIN_BOXES_DEFAULT;
@@ -1009,7 +1009,7 @@ async function initMainApp(user, assignedStores) {
   const ss = document.getElementById('storeSelect');
   ss.innerHTML = '<option value="" id="optPlaceholderStore">選擇門市…</option>';
   try {
-    const [{ data: customStores }, { data: dsData }, { data: mbData }, { data: cpData }, { data: ddpData }, { data: poData }, { data: pbData }] = await Promise.all([
+    const [{ data: customStores }, { data: dsData }, { data: mbData }, { data: cpData }, { data: ddpData }, { data: poData }, { data: pbData }, { data: skData }] = await Promise.all([
       sb.from('custom_stores').select('code, key, is_active'),
       sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
       sb.from('settings').select('value').eq('key','min_boxes_settings').maybeSingle(),
@@ -1017,6 +1017,7 @@ async function initMainApp(user, assignedStores) {
       sb.from('settings').select('value').eq('key','disabled_default_products').maybeSingle(),
       sb.from('settings').select('value').eq('key','product_sort_order').maybeSingle(),
       sb.from('settings').select('value').eq('key','per_box_settings').maybeSingle(),
+      sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle(),
     ]);
     minBoxesSettings = mbData?.value || {};
     perBoxSettings = pbData?.value || {};
@@ -1047,20 +1048,26 @@ async function initMainApp(user, assignedStores) {
       return ai - bi;
     });
 
-    // 預設門市
+    // 套用後台門市顯示名稱 override（code → displayKey），並同步更新 STORE_CODES_MAP
+    const storeKeyOverrides = skData?.value || {}; // { '00011': '新名稱', ... }
+    Object.entries(storeKeyOverrides).forEach(([code, newKey]) => {
+      if (STORE_CODES_MAP[newKey] === undefined) STORE_CODES_MAP[newKey] = code; // 加入新 key
+    });
+
+    // 預設門市（套用後台 key overrides）
     const defaultStores = [
       {key:'台中米平方',code:'00002'},{key:'土城日月光',code:'00003'},{key:'高雄成功',code:'00006'},
       {key:'台南中正',code:'00007'},{key:'台北內湖',code:'00008'},{key:'龜山文青',code:'00009'},
-      {key:'台南安平',code:'00010'},{key:'土城家樂福',code:'00011'},{key:'台南新仁',code:'00012'},
+      {key:'台南安平',code:'00010'},{key:'土城萬家福店',code:'00011'},{key:'台南新仁',code:'00012'},
       {key:'桃園經國',code:'00013'},{key:'台南仁德',code:'00014'},{key:'高雄新楠',code:'00015'},
-      {key:'嘉義嘉義',code:'00016'},{key:'台南新營',code:'00017'},{key:'台南東門',code:'00018'},
-      {key:'台北車站',code:'00019'},{key:'雲林斗六',code:'00020'},{key:'宜蘭店',code:'00021'},
-      {key:'內壢',code:'00022'},{key:'南投家樂福',code:'00023'},{key:'大樂',code:'00024'},
+      {key:'嘉義萬家福店',code:'00016'},{key:'台南新營',code:'00017'},{key:'台南東門',code:'00018'},
+      {key:'台北車站',code:'00019'},{key:'雲林斗六',code:'00020'},{key:'宜蘭萬家福店',code:'00021'},
+      {key:'內壢萬家福店',code:'00022'},{key:'南投萬家福店',code:'00023'},{key:'大樂',code:'00024'},
       {key:'新店碧潭',code:'00025'},{key:'台中西屯',code:'00026'},{key:'台中文心',code:'00027'},
-      {key:'小港漢民',code:'00028'},{key:'新店家樂福',code:'00029'},{key:'大全聯',code:'00030'},
+      {key:'小港漢民',code:'00028'},{key:'新店萬家福店',code:'00029'},{key:'大全聯',code:'00030'},
       {key:'南投埔里',code:'00031'},{key:'台中大里',code:'00032'},{key:'台中青海',code:'00033'},
       {key:'高雄光華',code:'00034'},{key:'三重溪尾',code:'00036'},{key:'小碧潭京站',code:'00037'},
-    ];
+    ].map(s => storeKeyOverrides[s.code] ? { ...s, key: storeKeyOverrides[s.code] } : s);
     const customActive = (customStores||[]).filter(s=>s.is_active).map(s=>({key:s.key,code:s.code}));
     // 只顯示被指派的門市（assignedStores）
     const allStores = [...defaultStores, ...customActive]

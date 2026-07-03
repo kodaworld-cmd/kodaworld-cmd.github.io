@@ -99,17 +99,18 @@ const SUPABASE_URL = 'https://jpabzycaqybbvebwewrt.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_nNp7DYbaTBtWm39agYBczg_c1sR7-4F';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// 靜態門市對照表（門市代號 → 顯示名稱），避免依賴需登入才能讀取的設定資料表
+// 靜態門市對照表（store_key → 顯示名稱）作為 fallback
+// 若後台有修改顯示名稱，loadAll() 會從 settings 載入並補充此表
 const STORE_NAMES = {
   '台中米平方':'珍有福 台中米平方店', '土城日月光':'珍有福 土城日月光店', '高雄成功':'珍有福 高雄成功店',
   '台南中正':'珍有福 台南中正店', '台北內湖':'珍有福 台北內湖店', '龜山文青':'珍有福 龜山文青店',
-  '台南安平':'珍有福 台南安平店', '土城家樂福':'珍有福 土城家樂福店', '台南新仁':'珍有福 台南新仁店',
+  '台南安平':'珍有福 台南安平店', '土城萬家福店':'珍有福 土城萬家福店', '台南新仁':'珍有福 台南新仁店',
   '桃園經國':'珍有福 桃園經國店', '台南仁德':'珍有福 台南仁德店', '高雄新楠':'珍有福 高雄新楠店',
-  '嘉義嘉義':'珍有福 嘉義家樂福店', '台南新營':'珍有福 台南新營店', '台南東門':'珍有福 台南東門店',
-  '台北車站':'珍有福 台北車站店', '雲林斗六':'珍有福 雲林斗六店', '宜蘭店':'珍有福 宜蘭家樂福店',
-  '內壢':'珍有福 內壢家樂福店', '南投家樂福':'珍有福 南投家樂福店', '大樂':'珍有福 高雄大樂店',
+  '嘉義萬家福店':'珍有福 嘉義萬家福店', '台南新營':'珍有福 台南新營店', '台南東門':'珍有福 台南東門店',
+  '台北車站':'珍有福 台北車站店', '雲林斗六':'珍有福 雲林斗六店', '宜蘭萬家福店':'珍有福 宜蘭萬家福店',
+  '內壢萬家福店':'珍有福 內壢萬家福店', '南投萬家福店':'珍有福 南投萬家福店', '大樂':'珍有福 高雄大樂店',
   '新店碧潭':'珍有福 新店碧潭店', '台中西屯':'珍有福 台中西屯店', '台中文心':'珍有福 台中文心店',
-  '小港漢民':'珍有福 小港漢民店', '新店家樂福':'珍有福 新店家樂福店', '大全聯':'珍有福 台南大全聯店',
+  '小港漢民':'珍有福 小港漢民店', '新店萬家福店':'珍有福 新店萬家福店', '大全聯':'珍有福 台南大全聯店',
   '南投埔里':'珍有福 南投埔里店', '台中大里':'珍有福 大里大買家店', '台中青海':'珍有福 台中青海店',
   '高雄光華':'珍有福 高雄光華店', '三重溪尾':'珍有福 三重溪尾店', '小碧潭京站':'珍有福 小碧潭京站店',
 };
@@ -221,7 +222,7 @@ function applyBoardLang() {
 
 function renderCard(it, isClosed) {
   const statusCls = it.status === '待處理' ? 'pending' : it.status === '處理中' ? 'processing' : 'closed';
-  const storeName = STORE_NAMES[it.store_key] || it.store_key;
+  const storeName = dynamicStoreNames[it.store_key] || STORE_NAMES[it.store_key] || it.store_key;
   const qty = it.quantity_affected != null ? `${it.quantity_affected}${it.quantity_unit || ''}` : '—';
   const remain = it.remaining_stock_qty != null ? `${it.remaining_stock_qty}${it.quantity_unit || ''}` : '—';
 
@@ -262,9 +263,28 @@ function renderCard(it, isClosed) {
   </div>`;
 }
 
+// 動態門市名稱 map（從 settings 載入後補充 STORE_NAMES）
+let dynamicStoreNames = {};
+
 async function loadAll() {
   document.getElementById('updatedAt').textContent = tb('loading');
-  const { data, error } = await sb.from('product_issues').select('*').order('created_at', { ascending: true });
+  // 同時載入案件資料與後台門市名稱設定（anon 可讀）
+  const [{ data, error }, { data: siData }, { data: skData }] = await Promise.all([
+    sb.from('product_issues').select('*').order('created_at', { ascending: true }),
+    sb.from('settings').select('value').eq('key','store_info_overrides').maybeSingle(),
+    sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle(),
+  ]);
+  // 將後台 fullName overrides 補入動態 map（store_key → fullName）
+  const infoOv = siData?.value || {};
+  Object.entries(infoOv).forEach(([k, v]) => { if (v?.fullName) dynamicStoreNames[k] = v.fullName; });
+  // store_key_overrides 是 code→newKey，這裡記下 newKey，讓顯示格式一致（fallback 用 '珍有福 ' + newKey）
+  // 新 key 若不在 STORE_NAMES，renderIssue 會使用 dynamicStoreNames[store_key] 或 fallback
+  const keyOv = skData?.value || {};
+  Object.values(keyOv).forEach(newKey => {
+    if (!STORE_NAMES[newKey] && !dynamicStoreNames[newKey]) {
+      dynamicStoreNames[newKey] = `珍有福 ${newKey}`;
+    }
+  });
   if (error) {
     document.getElementById('updatedAt').textContent = tb('loadError') + error.message;
     document.getElementById('activeList').innerHTML = `<div class="empty-msg">${tb('loadErrorMsg')}</div>`;
