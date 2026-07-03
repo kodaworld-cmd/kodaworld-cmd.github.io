@@ -973,19 +973,31 @@ async function init() {
   const regSel = document.getElementById('regStore');
   if (regSel) {
     try {
-      const [{ data: dsData }, { data: customStores }, { data: skData }] = await Promise.all([
+      const [{ data: dsData }, { data: customStores }, { data: skData }, { data: siData }] = await Promise.all([
         sb.from('settings').select('value').eq('key','disabled_stores').maybeSingle(),
         sb.from('custom_stores').select('code, key, is_active'),
         sb.from('settings').select('value').eq('key','store_key_overrides').maybeSingle(),
+        sb.from('settings').select('value').eq('key','store_info_overrides').maybeSingle(),
       ]);
       const disabled = dsData?.value || [];
       const storeKeyOverrides = skData?.value || {};
+      const storeInfoOverrides = siData?.value || {};
+      // store_info_overrides 的 key 就是後台設定的顯示名稱，建立反查表（舊名→新名）
+      // 當 store_key_overrides 資料不完整時作為備援
+      const infoKeys = new Set(Object.keys(storeInfoOverrides));
       // 停用清單可能還存著舊名，改用代號集合判斷更可靠
       const disabledCodes = new Set(disabled.map(k => STORE_CODES_MAP[k]).filter(Boolean));
-      // 套用後台 key override（後台改名後前台同步更新）
+      // 套用後台 key override（優先 store_key_overrides，備援 store_info_overrides）
       const effectiveRegMap = {};
       Object.entries(STORE_CODES_MAP).forEach(([key, code]) => {
-        effectiveRegMap[storeKeyOverrides[code] || key] = code;
+        // 1. store_key_overrides 有明確對應 → 直接用
+        if (storeKeyOverrides[code]) {
+          effectiveRegMap[storeKeyOverrides[code]] = code;
+          return;
+        }
+        // 2. store_info_overrides 裡找以舊名開頭的 key（如「台南中正」→「台南中正店」）
+        const infoMatch = [...infoKeys].find(k => k !== key && (k.startsWith(key) || key.startsWith(k)));
+        effectiveRegMap[infoMatch || key] = code;
       });
       Object.keys(effectiveRegMap).filter(key => {
         const code = effectiveRegMap[key];
