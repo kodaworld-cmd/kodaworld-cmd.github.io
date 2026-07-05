@@ -1060,6 +1060,29 @@ async function initMainApp(user, assignedStores) {
     // 套用後台門市顯示名稱 override（code → displayKey）
     const storeKeyOverrides = skData?.value || {};
 
+    // 正規化 assignedStores：user_store_access 可能殘留舊名稱，需對應到目前有效名稱
+    const origKeyMap = {
+      '台中米平方':'00002','土城日月光':'00003','高雄成功':'00006',
+      '台南中正':'00007','台北內湖':'00008','龜山文青':'00009',
+      '台南安平':'00010','台南新仁':'00012','桃園經國':'00013',
+      '台南仁德':'00014','高雄新楠':'00015','台南新營':'00017',
+      '台南東門':'00018','台北車站':'00019','雲林斗六':'00020',
+      '大樂':'00024','新店碧潭':'00025','台中西屯':'00026',
+      '台中文心':'00027','小港漢民':'00028','大全聯':'00030',
+      '南投埔里':'00031','台中大里':'00032','台中青海':'00033',
+      '高雄光華':'00034','三重溪尾':'00036','小碧潭京站':'00037',
+    };
+    const oldKeyToNew = {};
+    Object.entries(origKeyMap).forEach(([origKey, code]) => {
+      const effKey = storeKeyOverrides[code];
+      if (effKey && effKey !== origKey) oldKeyToNew[origKey] = effKey;
+    });
+    const assignedNorm = assignedStores.map(k => oldKeyToNew[k] || k);
+    // 若發現舊名，靜默修正 user_store_access（讓下次登入直接正確）
+    assignedStores.forEach(k => {
+      if (oldKeyToNew[k]) sb.from('user_store_access').update({ store_key: oldKeyToNew[k] }).eq('user_id', currentUserId).eq('store_key', k);
+    });
+
     // 預設門市（套用後台 key overrides）
     const defaultStores = [
       {key:'台中米平方',code:'00002'},{key:'土城日月光',code:'00003'},{key:'高雄成功',code:'00006'},
@@ -1077,7 +1100,7 @@ async function initMainApp(user, assignedStores) {
     const customActive = (customStores||[]).filter(s=>s.is_active).map(s=>({key:s.key,code:s.code}));
     // 只顯示被指派的門市（assignedStores）
     const allStores = [...defaultStores, ...customActive]
-      .filter(s => !disabled.includes(s.key) && assignedStores.includes(s.key));
+      .filter(s => !disabled.includes(s.key) && assignedNorm.includes(s.key));
 
     allStores.forEach(s => {
       const o = document.createElement('option');
@@ -1088,9 +1111,9 @@ async function initMainApp(user, assignedStores) {
 
     // 若依名稱比對不到任何門市（例如門市名稱對應不到預設/自訂清單），
     // 改用後台指派的門市代碼直接列出，避免下拉選單空白鎖死、無法選擇
-    if (allStores.length === 0 && assignedStores.length > 0) {
-      console.warn('門市清單比對不到指派門市，改用代碼列出：', assignedStores);
-      assignedStores.forEach(key => {
+    if (allStores.length === 0 && assignedNorm.length > 0) {
+      console.warn('門市清單比對不到指派門市，改用代碼列出：', assignedNorm);
+      assignedNorm.forEach(key => {
         if (disabled.includes(key)) return;
         const o = document.createElement('option');
         o.value = key;
