@@ -805,6 +805,7 @@ function updateIssueProdDateDisplay() {
 // State
 // ========================
 let currentStore = '';
+let currentStoreCode = ''; // 對應 STORE_CODES_MAP 的代號（不受 key override 影響）
 let currentWeek = '';
 let orderData = {};
 let isSubmitted = false;
@@ -1098,6 +1099,10 @@ async function initMainApp(user, assignedStores) {
       {key:'高雄光華',code:'00034'},{key:'三重溪尾',code:'00036'},{key:'小碧潭京站',code:'00037'},
     ].map(s => storeKeyOverrides[s.code] ? { ...s, key: storeKeyOverrides[s.code] } : s);
     const customActive = (customStores||[]).filter(s=>s.is_active).map(s=>({key:s.key,code:s.code}));
+    // 建立 effectiveKey → code 對照（供送單/通報案件編號使用）
+    const _storeKeyCodeMap = {};
+    [...defaultStores, ...customActive].forEach(s => { _storeKeyCodeMap[s.key] = s.code; });
+    window._storeKeyCodeMap = _storeKeyCodeMap;
     // 只顯示被指派的門市（assignedStores）
     const allStores = [...defaultStores, ...customActive]
       .filter(s => !disabled.includes(s.key) && assignedNorm.includes(s.key));
@@ -1177,6 +1182,7 @@ function checkDeadline() {
 
 function onStoreChange() {
   currentStore = document.getElementById('storeSelect').value;
+  currentStoreCode = (window._storeKeyCodeMap || {})[currentStore] || STORE_CODES_MAP[currentStore] || '';
   const thisMonday = getOrderWeekMonday();
   const del = getThursday(thisMonday, 0);
   document.getElementById('headerSub').textContent = currentStore ? `${currentStore}　配送日 ${fmtShort(del)}` : t('headerSubDefault');
@@ -1543,7 +1549,7 @@ async function submitOrder() {
 
   const payload = {
     store_key: currentStore,
-    store_code: STORE_CODES_MAP[currentStore] || '',
+    store_code: currentStoreCode || '',
     week_date: currentWeek,
     submitter_name: submitterName,
     data: { ...orderData },
@@ -1934,7 +1940,7 @@ async function submitIssue() {
 
   try {
     const now = new Date();
-    const code = STORE_CODES_MAP[currentStore] || '00000';
+    const code = currentStoreCode || '00000';
     const pad = n => String(n).padStart(2,'0');
     const caseNo = `IS${code}-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 

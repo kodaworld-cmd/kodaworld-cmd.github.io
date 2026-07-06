@@ -90,7 +90,7 @@ tr:hover td { background: #f8fafc; }
 .empty-icon { font-size: 36px; margin-bottom: 8px; }
 .print-title { display: none; }
 @media print {
-  @page { size: A4 landscape; margin: 8mm 10mm; }
+  @page { size: A3 landscape; margin: 8mm 10mm; }
   .header, .toolbar, .tabs, #breadAlert, .stats-row,
   .section-header button, #p1, #p3, #p4, #p5, #p6 { display: none !important; }
   .main { padding: 0; max-width: none; }
@@ -231,7 +231,7 @@ tr:hover td { background: #f8fafc; }
         <h3>🏪 各門市訂貨明細</h3>
         <div style="display:flex;align-items:center;gap:8px">
           <button class="btn btn-outline btn-sm" id="detailModeBtn" onclick="toggleDetailViewMode()">🔄 切換為盤點數量</button>
-          <span style="font-size:11px;color:var(--muted)">列印為 A4 橫式</span>
+          <span style="font-size:11px;color:var(--muted)">列印為 A3 橫式</span>
           <button class="btn btn-outline btn-sm" onclick="window.print()">🖨 列印</button>
           <button class="btn btn-success btn-sm" onclick="generateShippingOrders()">📄 生成出貨單</button>
         </div>
@@ -2510,7 +2510,7 @@ const T_ADMIN = {
     tab4:'未下單門市', tab5:'⚙️ 每箱設定', tab6:'🏪 門市管理',
     tab7:'👤 帳號管理', tab8:'🥘 品項管理',
     p1Title:'📦 各品項出貨數量（箱/包）', p1Empty:'本週尚無訂單',
-    p2Title:'🏪 各門市訂貨明細', p2PrintHint:'列印為 A4 橫式', p2Print:'🖨 列印',
+    p2Title:'🏪 各門市訂貨明細', p2PrintHint:'列印為 A3 橫式', p2Print:'🖨 列印',
     p2ColStore:'門市', p2ColEst:'預估箱數', p2ColSubmitter:'訂貨人', p2ColSent:'送出', p2Total:'合計',
     p3Title:'🚚 甫運物流出貨彙整', p3Export:'⬇ 匯出物流 CSV', p3Print:'🖨 列印',
     p3Bread1:'📦 本週出貨餐包明細（上週門市訂單）',
