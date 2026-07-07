@@ -1045,22 +1045,17 @@ async function init() {
     }
   }
 
-  // 檢查 URL hash 是否為密碼重設連結（type=recovery）
-  // onAuthStateChange 有時來不及接收到 PASSWORD_RECOVERY 事件，直接檢查 URL 最可靠
+  // 先呼叫 getSession()，讓 Supabase SDK 處理 URL hash 並建立 session
+  const { data: { session } } = await sb.auth.getSession();
+
+  // 再檢查 URL hash 是否為密碼重設連結（type=recovery）
+  // 必須在 getSession() 之後，session 才會正確建立，updateUser 才能成功
   const _hashParams = new URLSearchParams(window.location.hash.replace('#', ''));
   if (_hashParams.get('type') === 'recovery') {
-    // 讓 SDK 先用 hash token 建立 session，再顯示 overlay
-    const _accessToken  = _hashParams.get('access_token');
-    const _refreshToken = _hashParams.get('refresh_token');
-    if (_accessToken && _refreshToken) {
-      await sb.auth.setSession({ access_token: _accessToken, refresh_token: _refreshToken });
-    }
     showOrderPasswordResetOverlay();
     return;
   }
 
-  // 檢查是否已有 session
-  const { data: { session } } = await sb.auth.getSession();
   if (!session) {
     document.getElementById('authScreen').style.display = 'flex';
     document.getElementById('mainApp').style.display = 'none';
