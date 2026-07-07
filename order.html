@@ -191,6 +191,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
       </div>
       <button onclick="doLogin()" style="width:100%;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:12px;font-size:15px;font-weight:700;cursor:pointer">登入</button>
       <div id="loginMsg" style="margin-top:10px;font-size:13px;text-align:center"></div>
+      <div style="text-align:center;margin-top:12px">
+        <button onclick="toggleForgotForm()" style="background:none;border:none;color:#2563eb;font-size:12px;cursor:pointer;text-decoration:underline;padding:0">忘記密碼？</button>
+      </div>
+    </div>
+
+    <!-- 忘記密碼表單 -->
+    <div id="formForgot" style="display:none;background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07);margin-top:10px">
+      <div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:4px">🔑 重設密碼</div>
+      <div style="font-size:12px;color:#64748b;margin-bottom:14px">輸入您的 Email，系統將發送重設連結至信箱</div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:#64748b;display:block;margin-bottom:4px">Email</label>
+        <input id="forgotEmail" type="email" inputmode="email" placeholder="your@email.com"
+          style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px">
+      </div>
+      <button onclick="doForgotPassword()" style="width:100%;background:#0ea5e9;color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">發送重設連結</button>
+      <div id="forgotMsg" style="margin-top:10px;font-size:13px;text-align:center"></div>
     </div>
     <!-- 申請表單 -->
     <div id="formRegister" style="display:none;background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.07)">
@@ -830,6 +846,7 @@ function switchAuthTab(tab) {
   const isLogin = tab === 'login';
   document.getElementById('formLogin').style.display    = isLogin ? 'block' : 'none';
   document.getElementById('formRegister').style.display = isLogin ? 'none' : 'block';
+  document.getElementById('formForgot').style.display   = 'none'; // 切換 tab 時收起忘記密碼
   document.getElementById('tabLoginBtn').style.background    = isLogin ? '#fff' : 'transparent';
   document.getElementById('tabLoginBtn').style.color         = isLogin ? '#1e293b' : '#64748b';
   document.getElementById('tabLoginBtn').style.boxShadow     = isLogin ? '0 1px 3px rgba(0,0,0,0.1)' : 'none';
@@ -892,6 +909,30 @@ async function doLogout() {
   document.getElementById('loginEmail').value = '';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginMsg').textContent = '';
+  document.getElementById('formForgot').style.display = 'none';
+}
+
+function toggleForgotForm() {
+  const f = document.getElementById('formForgot');
+  const isHidden = f.style.display === 'none';
+  f.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) {
+    // 若登入欄有填 email，自動帶入
+    const loginEmail = document.getElementById('loginEmail').value.trim();
+    if (loginEmail) document.getElementById('forgotEmail').value = loginEmail;
+    document.getElementById('forgotMsg').textContent = '';
+  }
+}
+
+async function doForgotPassword() {
+  const email = document.getElementById('forgotEmail').value.trim();
+  const msg = document.getElementById('forgotMsg');
+  if (!email) { msg.style.color='#dc2626'; msg.textContent='請輸入 Email'; return; }
+  msg.style.color='#64748b'; msg.textContent='發送中…';
+  const redirectTo = window.location.href.split('?')[0]; // 回到本頁面觸發 PASSWORD_RECOVERY
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
+  if (error) { msg.style.color='#dc2626'; msg.textContent='發送失敗：' + error.message; return; }
+  msg.style.color='#16a34a'; msg.textContent='✅ 重設連結已寄出，請查看信箱';
 }
 
 async function loadUserAndStart(user) {
