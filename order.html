@@ -995,7 +995,9 @@ async function loadUserAndStart(user) {
 // ========================
 async function init() {
   const { createClient } = window.supabase;
-  sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+  sb = createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: { flowType: 'implicit', detectSessionInUrl: true }
+  });
 
   sb.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
