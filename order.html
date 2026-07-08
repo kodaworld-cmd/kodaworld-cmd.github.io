@@ -2116,10 +2116,12 @@ init();
 <!-- ═══ 版本標示：每次修改檔案，請把日期改成當天、序號 +1 ═══ -->
 <script>
 (function(){
-  window.APP_VERSION = 'v2026.07.08-1';
+  window.APP_VERSION = 'v2026.07.08-2';
   var b = document.createElement('div');
   b.textContent = 'order ' + window.APP_VERSION;
   b.style.cssText = 'position:fixed;bottom:6px;right:8px;font-size:11px;color:#999;font-family:monospace;z-index:9999;pointer-events:none;opacity:.85;';
+  var bar = document.querySelector('.summary-bar');
+  if (bar) b.style.bottom = (bar.offsetHeight + 8) + 'px';  // 避開底部送出訂單列
   document.body.appendChild(b);
   console.log('order.html ' + window.APP_VERSION);
 })();
