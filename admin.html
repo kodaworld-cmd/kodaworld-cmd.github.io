@@ -3274,5 +3274,16 @@ init();
 
 }());
 </script>
+<!-- ═══ 版本標示：每次修改檔案，請把日期改成當天、序號 +1 ═══ -->
+<script>
+(function(){
+  window.APP_VERSION = 'v2026.07.08-1';
+  var b = document.createElement('div');
+  b.textContent = 'admin ' + window.APP_VERSION;
+  b.style.cssText = 'position:fixed;bottom:6px;right:8px;font-size:11px;color:#999;font-family:monospace;z-index:9999;pointer-events:none;opacity:.85;';
+  document.body.appendChild(b);
+  console.log('admin.html ' + window.APP_VERSION);
+})();
+</script>
 </body>
 </html>
