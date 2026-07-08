@@ -2116,13 +2116,20 @@ init();
 <!-- ═══ 版本標示：每次修改檔案，請把日期改成當天、序號 +1 ═══ -->
 <script>
 (function(){
-  window.APP_VERSION = 'v2026.07.08-2';
+  window.APP_VERSION = 'v2026.07.08-3';
   var b = document.createElement('div');
   b.textContent = 'order ' + window.APP_VERSION;
   b.style.cssText = 'position:fixed;bottom:6px;right:8px;font-size:11px;color:#999;font-family:monospace;z-index:9999;pointer-events:none;opacity:.85;';
-  var bar = document.querySelector('.summary-bar');
-  if (bar) b.style.bottom = (bar.offsetHeight + 8) + 'px';  // 避開底部送出訂單列
   document.body.appendChild(b);
+  // 避開底部「送出訂單」列：列出現/變高時自動往上移
+  function placeBadge(){
+    var bar = document.querySelector('.summary-bar');
+    var h = (bar && bar.offsetHeight) || 0;
+    b.style.bottom = (h ? h + 8 : 6) + 'px';
+  }
+  placeBadge();
+  window.addEventListener('resize', placeBadge);
+  setInterval(placeBadge, 2000);
   console.log('order.html ' + window.APP_VERSION);
 })();
 </script>
