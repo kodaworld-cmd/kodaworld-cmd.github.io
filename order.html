@@ -548,7 +548,8 @@ const T = {
     infoText:'📦 訂貨以<strong>箱</strong>為單位，牛排鹽、青醬、天婦羅碎、義式香蒜醬、餐包等以<strong>包</strong>為單位，哈密瓜糖漿以<strong>罐</strong>為單位。<br>⏰ 請於週一上午 10:00 前送出，超時請在 LINE 群組告知。',
     breadNotice:'🍞 <strong>海鹽奶油餐包</strong>為代訂商品：<strong>本週一下單 → 下週四配送</strong>。',
     submittedBanner:'✅ 本週已送出訂單，如需修改請聯絡總部',
-    submittedBannerEditable:'✅ 本週已送出訂單，截止前可按下方「解鎖修改」自行調整',
+    submittedBannerEditable:'✅ 本週已送出訂單，截止前（週一 10:00）可按下方「解鎖修改」自行調整',
+    submittedBannerPastDeadline:'✅ 本週已送出訂單，截止時間（週一 10:00）已過，如需修改請聯絡總部',
     colStock:'盤點數量', colOrder:'訂貨數量',
     catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代訂商品（下週四配送）',
     tagSpecial:'代訂', tagUnit:'單位：', tagStockUnit:'盤點：', tagOrderUnit:'訂貨：',
@@ -617,7 +618,8 @@ const T = {
     infoText:'📦 発注は<strong>箱</strong>単位です。ステーキソルト、手作りジェノベーゼ、天かす、ガーリックオイルソース、塩バターロール等は<strong>袋</strong>単位、グリーンメロンシロップは<strong>缶</strong>単位です。<br>⏰ 月曜10:00までにご送信ください。締め切りを過ぎた場合はLINEグループにてご連絡ください。',
     breadNotice:'🍞 <strong>塩バターロール</strong>は代理注文商品：<strong>今週月曜発注 → 来週木曜配送</strong>。1週間前の発注が必要です！',
     submittedBanner:'✅ 今週の発注を送信済みです。変更はご連絡ください。',
-    submittedBannerEditable:'✅ 今週の発注を送信済みです。締め切り前なら下の「ロック解除」で編集できます',
+    submittedBannerEditable:'✅ 今週の発注を送信済みです。締め切り（月曜10:00）前なら下の「ロック解除」で編集できます',
+    submittedBannerPastDeadline:'✅ 今週の発注を送信済みです。締め切り（月曜10:00）を過ぎたため、変更はご連絡ください。',
     colStock:'在庫数量', colOrder:'発注数量',
     catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代理注文商品（来週木曜配送）',
     tagSpecial:'代理注文', tagUnit:'単位：', tagStockUnit:'在庫：', tagOrderUnit:'発注：',
@@ -755,7 +757,11 @@ function applyLang() {
   document.querySelector('.info-row').innerHTML = l.infoText;
   document.querySelector('.special-notice').innerHTML = l.breadNotice;
   const banner = document.getElementById('submittedBanner');
-  if (banner) banner.textContent = canUnlockCurrent ? l.submittedBannerEditable : l.submittedBanner;
+  if (banner) {
+    if (canUnlockCurrent) banner.textContent = l.submittedBannerEditable;
+    else if (storeDeadlinePassed) banner.textContent = l.submittedBannerPastDeadline || l.submittedBanner;
+    else banner.textContent = l.submittedBanner;
+  }
   const btn = document.getElementById('submitBtn');
   if (btn && !isSubmitted) btn.textContent = inventoryOnly ? l.btnInventorySubmit : l.btnSubmit;
   // 只盤點切換標籤
@@ -826,6 +832,7 @@ let currentWeek = '';
 let orderData = {};
 let isSubmitted = false;
 let canUnlockCurrent = false; // 目前帳號是否可解鎖修改本週訂單（影響 submittedBanner 文字）
+let storeDeadlinePassed = false; // store 角色但截止時間已過（顯示不同 banner 提示）
 let lastWeekBreadQty = 0;    // 上週餐包訂購量（本週隨貨出貨）
 let minBoxesSettings = {};   // { store_key: 最低箱數 }
 let perBoxSettings = {};     // { productId: 每箱數量 }（從後台品項設定讀取）
@@ -892,7 +899,7 @@ async function doRegister() {
   if (signUpData?.user) {
     const { error: profileError } = await sb.from('user_profiles').upsert({
       id: signUpData.user.id, email, display_name: name,
-      requested_store: requestedStore, is_admin: false,
+      requested_store: requestedStore, is_admin: false, role: 'store',
     }, { onConflict: 'id' });
     // 若 RLS 導致 upsert 失敗，metadata 仍保留 requested_store，登入時會自動補寫
     if (profileError) console.warn('profile upsert failed at signup:', profileError.message);
@@ -941,6 +948,16 @@ async function loadUserAndStart(user) {
   const { data: profileData } = await sb.from('user_profiles')
     .select('role, is_admin, display_name, requested_store').eq('id', user.id).maybeSingle();
   currentUserRole = profileData?.role || (profileData?.is_admin ? 'admin' : 'store');
+
+  // order.html 是門市端，若角色被誤設為 viewer（資料庫 DEFAULT 問題）
+  // 自動修正為 store 並回寫 DB，確保解鎖功能正常運作
+  if (currentUserRole === 'viewer') {
+    currentUserRole = 'store';
+    sb.from('user_profiles').update({ role: 'store' }).eq('id', user.id)
+      .then(() => console.log('[訂貨系統] 角色自動修正: viewer → store'));
+  }
+
+  console.log('[訂貨系統] 登入帳號 role:', profileData?.role ?? '(null/未設定)', '→ 有效角色:', currentUserRole);
   const nameInput = document.getElementById('submitterName');
   if (nameInput && profileData?.display_name) { nameInput.value = profileData.display_name; }
 
@@ -952,7 +969,7 @@ async function loadUserAndStart(user) {
       id: user.id, email: user.email,
       display_name: metaName,
       requested_store: metaStore || '',
-      is_admin: false,
+      is_admin: false, role: 'store',
     }, { onConflict: 'id' });
     if (metaName) {
       const nameInput = document.getElementById('submitterName');
@@ -1268,13 +1285,24 @@ async function loadOrderState() {
   const canUnlock = ['admin','manager'].includes(currentUserRole) || (currentUserRole==='store' && beforeDeadline);
   const canSubmit = ['admin','manager','store'].includes(currentUserRole);
   canUnlockCurrent = canUnlock;
+  storeDeadlinePassed = !canUnlock && currentUserRole === 'store' && !beforeDeadline;
+
+  // 診斷用 log（可在瀏覽器 console 確認角色與截止狀態）
+  console.log('[訂貨系統] 角色:', currentUserRole, '| 截止前:', beforeDeadline, '| 可解鎖:', canUnlock, '| 截止時間:', weekDeadline.toLocaleTimeString('zh-TW'));
 
   if (data) {
     orderData = data.data || {};
     isSubmitted = true;
     const banner = document.getElementById('submittedBanner');
     banner.style.display = 'block';
-    banner.textContent = canUnlock ? t('submittedBannerEditable') : t('submittedBanner');
+    // 根據角色和截止狀態顯示適當的提示文字
+    if (canUnlock) {
+      banner.textContent = t('submittedBannerEditable');
+    } else if (storeDeadlinePassed) {
+      banner.textContent = t('submittedBannerPastDeadline');
+    } else {
+      banner.textContent = t('submittedBanner');
+    }
     // 截止前店家或 manager/admin 可看到解鎖按鈕；截止後 viewer/store 只能看
     if (canUnlock) {
       btn.textContent = t('btnUnlock'); btn.className = 'submit-btn'; btn.disabled = false;
