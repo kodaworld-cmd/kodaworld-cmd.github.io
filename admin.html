@@ -936,22 +936,24 @@ function renderAll() {
 // ========================
 function renderStats() {
   const pb = getPerBox();
-  const submitted = new Set(allOrders.map(o=>o.store_key)).size;
+  const realOrders = allOrders.filter(o => o.data?._skip !== true);
+  const submitted = new Set(allOrders.map(o=>o.store_key)).size; // 已送出（含不訂貨）
   const totals = {};
-  allOrders.forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { totals[id]=(totals[id]||0)+(d.order||0); }));
+  realOrders.forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { totals[id]=(totals[id]||0)+(d.order||0); })); // 不含不訂貨
 
   const lastTotals = {};
   lastWeekOrders.forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { lastTotals[id]=(lastTotals[id]||0)+(d.order||0); }));
   const breadToShip = lastTotals[1367]||0;
   const breadToBuy  = totals[1367]||0;
-  const storesWithBread = allOrders.filter(o=>(o.data?.[1367]?.order||0)>0).length;
+  const storesWithBread = realOrders.filter(o=>(o.data?.[1367]?.order||0)>0).length;
   const activeMaster = getActiveStoreMaster();
 
   // 正確總箱數：各門市個別換算後加總（散裝品項 perBox 換算，牛排鹽/哈密瓜不計）
   // 再加上本週出貨的餐包（上週已訂，用 calcBreadBoxes 換算）
   // 餐包per店ceil後加總（與門市明細合計列邏輯一致，不可跨門市合箱）
-  const totalShipBoxes = allOrders.reduce((sum, o) => sum + calcOrderBoxes(o.data || {}), 0)
-                       + lastWeekOrders.reduce((sum, o) => sum + calcBreadBoxes(o.data?.[1367]?.order || 0), 0);
+  // 不訂貨門市不計入箱數
+  const totalShipBoxes = realOrders.reduce((sum, o) => sum + calcOrderBoxes(o.data || {}), 0)
+                       + lastWeekOrders.filter(o=>o.data?._skip!==true).reduce((sum, o) => sum + calcBreadBoxes(o.data?.[1367]?.order || 0), 0);
 
   document.getElementById('sSubmitted').textContent = submitted;
   document.getElementById('sPending').textContent   = activeMaster.length - submitted;
@@ -980,7 +982,7 @@ function renderStats() {
 function renderProdGrid() {
   const pb = getPerBox();
   const totals = {};
-  allOrders.forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { totals[id]=(totals[id]||0)+(d.order||0); }));
+  allOrders.filter(o=>o.data?._skip!==true).forEach(o => Object.entries(o.data||{}).forEach(([id,d]) => { totals[id]=(totals[id]||0)+(d.order||0); }));
   if (!allOrders.length) { document.getElementById('prodGrid').innerHTML='<div class="empty-state"><div class="empty-icon">📭</div>本週尚無訂單</div>'; return; }
   const specialLabel = adminLang==='ja' ? '代理注文' : '代訂';
   const totalLabel   = adminLang==='ja' ? '計' : '共';
@@ -1056,7 +1058,9 @@ function renderDetailTable() {
 
   const rows=submitted.map(storeKey => {
     const o=orderMap[storeKey]; const oLast=lastMap[storeKey]; const data=o?.data||{};
+    const isSkipOrder = data._skip === true;
     const cells=PRODUCTS.map(p=>{
+      if (isSkipOrder) return `<td class="qc off">—</td>${p.id===BREAD_ID?'<td class="qc off">—</td>':''}`;  // 不訂貨：全顯示 —
       if (p.id===BREAD_ID) {
         if (isStockMode) {
           const sLast=oLast?.data?.[BREAD_ID]?.stock;
@@ -1080,18 +1084,21 @@ function renderDetailTable() {
       const v=data[p.id]?.order||0;
       return `<td class="qc ${v>0?'on':'off'}">${v>0?v:'—'}</td>`;
     });
-    // 箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）（盤點模式不適用）
-    const rowBoxes = (o ? calcOrderBoxes(data) : 0) + calcBreadBoxes(oLast?.data?.[BREAD_ID]?.order || 0);
-    const rowBoxesCell = isStockMode ? '—' : `${rowBoxes} 箱`;
+    // 箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）（盤點模式不適用；不訂貨為0）
+    const rowBoxes = isSkipOrder ? 0 : ((o ? calcOrderBoxes(data) : 0) + calcBreadBoxes(oLast?.data?.[BREAD_ID]?.order || 0));
+    const rowBoxesCell = isStockMode ? '—' : (isSkipOrder ? '—' : `${rowBoxes} 箱`);
 
     // 判斷是否截止後修改
     const submittedAt = o?.submitted_at ? new Date(o.submitted_at) : null;
-    const isLateEdit = submittedAt && submittedAt > weekDeadline;
+    const isLateEdit = !isSkipOrder && submittedAt && submittedAt > weekDeadline;
     const timeStr = submittedAt
       ? submittedAt.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})
       : (oLast?'僅餐包':'');
     const lateTag = isLateEdit
       ? `<span style="display:inline-block;background:#fff7ed;color:#d97706;border:1px solid #fdba74;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700;margin-left:3px">⚠️ 截止後修改</span>`
+      : '';
+    const skipTag = isSkipOrder
+      ? `<span style="display:inline-block;background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;border-radius:4px;padding:1px 5px;font-size:10px;font-weight:700">🚫 本週不訂貨</span>`
       : '';
 
     const submitter=o?.submitter_name||'—';
@@ -1099,8 +1106,8 @@ function renderDetailTable() {
     const orderId = o?.id || null;
     const editBtn = orderId ? `<button onclick="editOrder('${storeKey}','${orderId}')" style="background:#eff6ff;color:var(--primary);border:1px solid #bfdbfe;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;margin-right:3px">✏️</button>` : '';
     const delBtn  = orderId ? `<button onclick="deleteOrder('${storeKey}','${orderId}')" style="background:#fee2e2;color:var(--red);border:1px solid #fca5a5;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer">🗑</button>` : '';
-    const rowStyle = isLateEdit ? ' style="background:#fffbeb"' : '';
-    return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span></td>${cells.join('')}<td class="grand">${rowBoxesCell}</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
+    const rowStyle = isSkipOrder ? ' style="background:#f9fafb;opacity:0.85"' : (isLateEdit ? ' style="background:#fffbeb"' : '');
+    return `<tr id="row_${storeKey}"${rowStyle}><td><strong class="store-full">${storeKey}</strong><span class="store-short" style="display:none">${shortStore}</span>${skipTag}</td>${cells.join('')}<td class="grand">${rowBoxesCell}</td><td style="font-size:12px;font-weight:600;color:var(--primary-dk)">${submitter}</td><td style="font-size:10px;color:var(--muted);white-space:nowrap">${timeStr}${lateTag}</td><td style="white-space:nowrap">${editBtn}${delBtn}</td></tr>`;
   });
 
   const colTotalsHtml=PRODUCTS.map(p=>{

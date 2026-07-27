@@ -312,18 +312,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <div style="font-size:11px;color:#3b82f6">已納入本週出貨箱數預估</div>
   </div>
   <div id="productArea"></div>
-  <!-- 只盤點切換（靠近送出按鈕，避免漏看） -->
-  <div style="margin:14px 12px;display:flex;align-items:center;gap:10px;background:#f8fafc;border:1.5px solid var(--border);border-radius:8px;padding:9px 12px">
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;font-size:13px;font-weight:700;color:var(--text)">
-      <div id="inventoryToggle" onclick="toggleInventoryOnly()"
-        style="width:40px;height:22px;border-radius:11px;background:#d1d5db;position:relative;cursor:pointer;flex-shrink:0;transition:background 0.2s">
-        <div id="inventoryThumb"
-          style="width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>
-      </div>
-      <span id="inventoryOnlyLabel">📋 只盤點，不訂貨</span>
-    </label>
-    <span id="inventoryOnlyHint" style="font-size:11px;color:var(--muted)">開啟後送出時，只會記錄盤點數量，不會送出訂貨</span>
-  </div>
   <div class="page-pad"></div>
 </div>
 
@@ -445,7 +433,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
     <strong id="summaryText">請先選擇門市</strong>
     <span id="summaryDetail">共 0 種品項</span>
   </div>
-  <button class="submit-btn" id="submitBtn" onclick="submitOrder()" disabled>送出訂單</button>
+  <div style="display:flex;gap:8px;align-items:center">
+    <button class="submit-btn" id="skipWeekBtn" onclick="skipWeek()" style="display:none;background:#6b7280;font-size:13px;padding:10px 14px" disabled>本週不訂貨</button>
+    <button class="submit-btn" id="submitBtn" onclick="submitOrder()" disabled>送出訂單</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -550,6 +541,11 @@ const T = {
     submittedBanner:'✅ 本週已送出訂單，如需修改請聯絡總部',
     submittedBannerEditable:'✅ 本週已送出訂單，截止前（週一 10:00）可按下方「解鎖修改」自行調整',
     submittedBannerPastDeadline:'✅ 本週已送出訂單，截止時間（週一 10:00）已過，如需修改請聯絡總部',
+    btnSkipWeek:'本週不訂貨',
+    skipWeekConfirm:'確定本週不訂貨？\n（此操作將通知總部本週無需備貨）',
+    skipWeekToast:'✅ 已登記本週不訂貨',
+    submittedBannerSkip:'🚫 本週已登記不訂貨，截止前（週一 10:00）可按「解鎖修改」取消或改為訂貨',
+    submittedBannerSkipPastDeadline:'🚫 本週已登記不訂貨，截止時間已過，如需調整請聯絡總部',
     colStock:'盤點數量', colOrder:'訂貨數量',
     catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代訂商品（下週四配送）',
     tagSpecial:'代訂', tagUnit:'單位：', tagStockUnit:'盤點：', tagOrderUnit:'訂貨：',
@@ -566,9 +562,6 @@ const T = {
     lastWeekBreadUnit:'包',
     lastWeekBreadLabel:'🍞 本週隨貨出貨餐包（上週已訂）',
     historyNotOrdered:'　未訂',
-    inventoryOnlyLabel:'📋 只盤點，不訂貨',
-    inventoryOnlyHint:'開啟後送出時，只會記錄盤點數量，不會送出訂貨',
-    btnInventorySubmit:'送出盤點',
     btnUnlock:'🔓 解鎖修改',
     btnViewOnly:'查看模式',
     waitingStoreTitle:'等待門市指派',
@@ -620,6 +613,11 @@ const T = {
     submittedBanner:'✅ 今週の発注を送信済みです。変更はご連絡ください。',
     submittedBannerEditable:'✅ 今週の発注を送信済みです。締め切り（月曜10:00）前なら下の「ロック解除」で編集できます',
     submittedBannerPastDeadline:'✅ 今週の発注を送信済みです。締め切り（月曜10:00）を過ぎたため、変更はご連絡ください。',
+    btnSkipWeek:'今週は発注なし',
+    skipWeekConfirm:'今週は発注なしで確定しますか？',
+    skipWeekToast:'✅ 今週は発注なしを登録しました',
+    submittedBannerSkip:'🚫 今週は発注なしで登録済みです。締め切り前なら「ロック解除」で変更できます',
+    submittedBannerSkipPastDeadline:'🚫 今週は発注なしで登録済みです。締め切りを過ぎたため変更はご連絡ください。',
     colStock:'在庫数量', colOrder:'発注数量',
     catFrozen:'冷凍商品', catAmbient:'常温商品', catSpecial:'代理注文商品（来週木曜配送）',
     tagSpecial:'代理注文', tagUnit:'単位：', tagStockUnit:'在庫：', tagOrderUnit:'発注：',
@@ -636,9 +634,6 @@ const T = {
     headerSubDefault:'店舗を選択してください', unlockConfirm:'「{store}」の今週の発注をロック解除して再編集しますか？', unlockedToast:'✅ ロック解除しました。再編集して送信できます',
     lastWeekBreadUnit:'袋',
     lastWeekBreadLabel:'🍞 今週同梱出荷 塩バターロール（先週発注済）',
-    inventoryOnlyLabel:'📋 棚卸のみ・発注なし',
-    inventoryOnlyHint:'ONにすると在庫数のみ記録され、発注は送信されません',
-    btnInventorySubmit:'棚卸データを送信',
     btnUnlock:'🔓 ロック解除して再編集',
     btnViewOnly:'閲覧のみ',
     waitingStoreTitle:'店舗指定待ち',
@@ -763,12 +758,9 @@ function applyLang() {
     else banner.textContent = l.submittedBanner;
   }
   const btn = document.getElementById('submitBtn');
-  if (btn && !isSubmitted) btn.textContent = inventoryOnly ? l.btnInventorySubmit : l.btnSubmit;
-  // 只盤點切換標籤
-  const invLabel = document.getElementById('inventoryOnlyLabel');
-  if (invLabel) invLabel.textContent = l.inventoryOnlyLabel;
-  const invHint = document.getElementById('inventoryOnlyHint');
-  if (invHint) invHint.textContent = l.inventoryOnlyHint;
+  if (btn && !isSubmitted) btn.textContent = l.btnSubmit;
+  const skipBtn = document.getElementById('skipWeekBtn');
+  if (skipBtn) skipBtn.textContent = l.btnSkipWeek;
   // 尚未選擇門市時，標題副標保持與目前語言一致
   if (!currentStore) document.getElementById('headerSub').textContent = l.headerSubDefault;
   checkDeadline();
@@ -836,7 +828,7 @@ let storeDeadlinePassed = false; // store 角色但截止時間已過（顯示�
 let lastWeekBreadQty = 0;    // 上週餐包訂購量（本週隨貨出貨）
 let minBoxesSettings = {};   // { store_key: 最低箱數 }
 let perBoxSettings = {};     // { productId: 每箱數量 }（從後台品項設定讀取）
-let inventoryOnly = false;   // 只盤點模式
+
 let lastSubmittedOrder = null; // 送出成功畫面所需資料（供切換語言時重新渲染）
 
 const MIN_BOXES_DEFAULT = 4;
@@ -1290,36 +1282,59 @@ async function loadOrderState() {
   // 診斷用 log（可在瀏覽器 console 確認角色與截止狀態）
   console.log('[訂貨系統] 角色:', currentUserRole, '| 截止前:', beforeDeadline, '| 可解鎖:', canUnlock, '| 截止時間:', weekDeadline.toLocaleTimeString('zh-TW'));
 
+  const skipBtn = document.getElementById('skipWeekBtn');
+  const isSkip = data?.data?._skip === true;
+
   if (data) {
-    orderData = data.data || {};
     isSubmitted = true;
+    orderData = isSkip ? {} : (data.data || {});
     const banner = document.getElementById('submittedBanner');
     banner.style.display = 'block';
-    // 根據角色和截止狀態顯示適當的提示文字
-    if (canUnlock) {
-      banner.textContent = t('submittedBannerEditable');
-    } else if (storeDeadlinePassed) {
-      banner.textContent = t('submittedBannerPastDeadline');
+    if (skipBtn) skipBtn.style.display = 'none';
+
+    if (isSkip) {
+      // 本週不訂貨狀態
+      if (canUnlock) {
+        banner.textContent = t('submittedBannerSkip');
+        btn.textContent = t('btnUnlock'); btn.className = 'submit-btn'; btn.disabled = false;
+        btn.onclick = () => unlockOrder();
+      } else if (storeDeadlinePassed) {
+        banner.textContent = t('submittedBannerSkipPastDeadline');
+        btn.textContent = t('btnSubmitted'); btn.className = 'submit-btn submitted'; btn.disabled = true;
+        btn.onclick = null;
+      } else {
+        banner.textContent = t('submittedBannerSkip');
+        btn.textContent = t('btnSubmitted'); btn.className = 'submit-btn submitted'; btn.disabled = true;
+        btn.onclick = null;
+      }
     } else {
-      banner.textContent = t('submittedBanner');
-    }
-    // 截止前店家或 manager/admin 可看到解鎖按鈕；截止後 viewer/store 只能看
-    if (canUnlock) {
-      btn.textContent = t('btnUnlock'); btn.className = 'submit-btn'; btn.disabled = false;
-      btn.onclick = () => unlockOrder();
-    } else {
-      btn.textContent = t('btnSubmitted'); btn.className = 'submit-btn submitted'; btn.disabled = true;
-      btn.onclick = null;
+      // 一般已送出訂單
+      if (canUnlock) {
+        banner.textContent = t('submittedBannerEditable');
+      } else if (storeDeadlinePassed) {
+        banner.textContent = t('submittedBannerPastDeadline');
+      } else {
+        banner.textContent = t('submittedBanner');
+      }
+      if (canUnlock) {
+        btn.textContent = t('btnUnlock'); btn.className = 'submit-btn'; btn.disabled = false;
+        btn.onclick = () => unlockOrder();
+      } else {
+        btn.textContent = t('btnSubmitted'); btn.className = 'submit-btn submitted'; btn.disabled = true;
+        btn.onclick = null;
+      }
     }
   } else {
     orderData = {};
     isSubmitted = false;
     document.getElementById('submittedBanner').style.display = 'none';
     if (canSubmit) {
+      if (skipBtn) { skipBtn.style.display = 'inline-block'; skipBtn.disabled = !currentStore; }
       btn.textContent = t('btnSubmit'); btn.className = 'submit-btn'; btn.disabled = true;
       btn.onclick = () => submitOrder();
     } else {
       // viewer
+      if (skipBtn) skipBtn.style.display = 'none';
       btn.textContent = t('btnViewOnly'); btn.className = 'submit-btn submitted'; btn.disabled = true;
       btn.onclick = null;
     }
@@ -1332,13 +1347,42 @@ async function loadOrderState() {
 function unlockOrder() {
   if (!confirm(t('unlockConfirm').replace('{store}', currentStore))) return;
   isSubmitted = false;
+  orderData = {};
   document.getElementById('submittedBanner').style.display = 'none';
   const btn = document.getElementById('submitBtn');
   btn.textContent = t('btnSubmit'); btn.className = 'submit-btn'; btn.disabled = true;
   btn.onclick = () => submitOrder();
+  const skipBtn = document.getElementById('skipWeekBtn');
+  if (skipBtn && ['admin','manager','store'].includes(currentUserRole)) {
+    skipBtn.style.display = 'inline-block'; skipBtn.disabled = !currentStore;
+  }
   showToast(t('unlockedToast'));
   renderProducts();
   updateSummary();
+}
+
+async function skipWeek() {
+  if (!currentStore || !currentWeek) return;
+  if (!confirm(t('skipWeekConfirm'))) return;
+  const skipBtn = document.getElementById('skipWeekBtn');
+  const submitBtn = document.getElementById('submitBtn');
+  if (skipBtn) skipBtn.disabled = true;
+  if (submitBtn) submitBtn.disabled = true;
+
+  const { error } = await sb.from('orders').upsert(
+    { store_key: currentStore, week_date: currentWeek, data: { _skip: true } },
+    { onConflict: 'store_key,week_date' }
+  );
+
+  if (error) {
+    console.error(error);
+    showToast(t('toastFail'));
+    if (skipBtn) skipBtn.disabled = false;
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
+  showToast(t('skipWeekToast'));
+  await loadOrderState();
 }
 
 // ========================
@@ -1369,7 +1413,7 @@ function renderProducts() {
       const plusClass = isSpecial ? 'qty-btn plus special-plus' : 'qty-btn plus';
       // 盤點輸入只在「已送出」後鎖定；訂貨輸入在「只盤點」模式下也要鎖定
       const stockDisabled = isSubmitted ? 'disabled' : '';
-      const orderDisabled = (isSubmitted || inventoryOnly) ? 'disabled' : '';
+      const orderDisabled = isSubmitted ? 'disabled' : '';
       html += `
       <div class="${cardClass}" id="card_${p.id}">
         <div class="prod-row">
@@ -1494,23 +1538,6 @@ function calcEstimatedBoxes() {
   return { boxes: totalBoxes, breakdown };
 }
 
-function toggleInventoryOnly() {
-  inventoryOnly = !inventoryOnly;
-  const toggle = document.getElementById('inventoryToggle');
-  const thumb  = document.getElementById('inventoryThumb');
-  const btn    = document.getElementById('submitBtn');
-  if (inventoryOnly) {
-    toggle.style.background = '#7c3aed';
-    thumb.style.left = '20px';
-    if (btn && !isSubmitted) { btn.textContent = t('btnInventorySubmit'); btn.disabled = !currentStore || !document.getElementById('submitterName').value.trim(); }
-  } else {
-    toggle.style.background = '#d1d5db';
-    thumb.style.left = '2px';
-    if (btn && !isSubmitted) { btn.textContent = t('btnSubmit'); }
-  }
-  renderProducts();
-  updateSummary();
-}
 
 function renderLastWeekBread() {
   const banner = document.getElementById('lastWeekBreadBanner');
@@ -1550,7 +1577,7 @@ function updateSummary() {
   }
 
   const btn = document.getElementById('submitBtn');
-  if (!isSubmitted) btn.disabled = (!inventoryOnly && ordered.length===0) || !currentStore || !name;
+  if (!isSubmitted) btn.disabled = ordered.length===0 || !currentStore || !name;
 }
 
 
@@ -1622,7 +1649,7 @@ async function submitOrder() {
 
 
   const ordered = PRODUCTS.filter(p => (orderData[p.id]?.order||0) > 0);
-  if (!inventoryOnly && !ordered.length) { showToast(t('toastItem')); return; }
+  if (!ordered.length) { showToast(t('toastItem')); return; }
 
   const btn = document.getElementById('submitBtn');
   btn.textContent = t('btnSubmitting'); btn.disabled = true;
@@ -1703,11 +1730,7 @@ function renderSuccessScreen() {
 }
 
 function resetAndBack() {
-  orderData = {}; isSubmitted = false; lastWeekBreadQty = 0; inventoryOnly = false; lastSubmittedOrder = null;
-  const toggle = document.getElementById('inventoryToggle');
-  const thumb  = document.getElementById('inventoryThumb');
-  if (toggle) toggle.style.background = '#d1d5db';
-  if (thumb)  thumb.style.left = '2px';
+  orderData = {}; isSubmitted = false; lastWeekBreadQty = 0; lastSubmittedOrder = null;
   document.getElementById('pageOrder').style.display = 'block';
   document.getElementById('summaryBar').style.display = 'flex';
   document.getElementById('successScreen').classList.remove('show');
