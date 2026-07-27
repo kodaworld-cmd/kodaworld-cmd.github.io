@@ -1046,7 +1046,13 @@ function renderDetailTable() {
   const orderMap={}; allOrders.forEach(o=>{orderMap[o.store_key]=o;});
   const lastMap={}; lastWeekOrders.forEach(o=>{lastMap[o.store_key]=o;});
   const storeSet=new Set([...allOrders.map(o=>o.store_key),...lastWeekOrders.map(o=>o.store_key)]);
-  const submitted=[...storeSet].sort((a,b)=>a.localeCompare(b));
+  // 依門市管理設定的排序（cachedStoreOrder），未在排序清單內的排到最後
+  const submitted=[...storeSet].sort((a,b)=>{
+    const ai=cachedStoreOrder.indexOf(a), bi=cachedStoreOrder.indexOf(b);
+    if(ai===-1&&bi===-1) return a.localeCompare(b);
+    if(ai===-1) return 1; if(bi===-1) return -1;
+    return ai-bi;
+  });
 
   // 計算本週截止時間（週一 10:00）
   const wf2=document.getElementById('weekFilter');
