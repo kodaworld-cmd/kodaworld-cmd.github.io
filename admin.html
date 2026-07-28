@@ -1268,10 +1268,14 @@ function renderLogistics() {
   const frozenProds=PRODUCTS.filter(p=>p.cat==='冷凍');
   const ambientProds=PRODUCTS.filter(p=>p.cat==='常温');
   const activeMaster=_sortStores(getActiveStoreMaster());
+  // 甫運主表格排除大榮門市（台北車站）
+  const _DAIWA_KW = ['台北車站'];
+  const isDaiwaStore = sm => _DAIWA_KW.some(d => sm.key===d || sm.key.includes(d) || (sm.fullName||'').includes(d));
+  const fuyunMaster = activeMaster.filter(sm => !isDaiwaStore(sm));
 
   let frozenGrand=0, ambientGrand=0, totalGrand=0;
   let storesWithOrder=0;
-  const rows=activeMaster.map(sm=>{
+  const rows=fuyunMaster.map(sm=>{
     const o=orderMap[sm.key];
     const oLast=lastMap[sm.key];
     const data=o?.data||{};
@@ -3139,7 +3143,8 @@ init();
   };
 
   // ── Daiwa render ──────────────────────────────────────
-  var DAIWA = ['台北車站'];
+  // DAIWA_KEYS：關鍵字列表，只要 store.key 或 fullName 包含其中一個即歸入大榮
+  var DAIWA_KEYS = ['台北車站'];
   window.renderDaiwaSection = function() {
     if (typeof allOrders === 'undefined') return;
     var orderMap = {};
@@ -3147,7 +3152,10 @@ init();
     var fp = PRODUCTS.filter(function(p){ return p.cat === '冷凍'; });
     var ap = PRODUCTS.filter(function(p){ return p.cat === '常温'; });
     var ms = typeof getActiveStoreMaster === 'function' ? getActiveStoreMaster() : [];
-    var ds = ms.filter(function(sm){ return DAIWA.indexOf(sm.key) >= 0; });
+    // 用關鍵字包含比對，避免 key 大小寫或附加字元造成找不到
+    var ds = ms.filter(function(sm){
+      return DAIWA_KEYS.some(function(d){ return sm.key===d || sm.key.indexOf(d)>=0 || (sm.fullName||'').indexOf(d)>=0; });
+    });
     var tot = 0;
     var rows = ds.map(function(sm) {
       var o = orderMap[sm.key];
