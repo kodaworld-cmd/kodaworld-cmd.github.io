@@ -1163,6 +1163,45 @@ function calcBreadBoxes(qty) {
   const perBox = LOOSE_BOX_ADMIN_DEFAULT[1367] || 6;
   return qty > 0 ? Math.ceil(qty / perBox) : 0;
 }
+// 出貨單專用箱數計算（套用混合箱裝箱規則）
+// 混合箱 = 香蒜醬/青醬/哈密瓜/牛排鹽/蝦碎/餐包 等散裝品共用的實體箱
+// 牛排鹽：perBox=0，不額外計箱
+// 蝦碎：≤2包 → 混入現有混合箱，不額外計；>2包 → 新增1個混合箱（+1箱）
+// 餐包：混合箱數量=1 → 混入不計；混合箱=0或≥2 → 獨立計箱
+function calcShipBoxes(order, lastOrder) {
+  const BREAD_ID  = 1367;
+  const SHRIMP_ID = 1368;
+  const curData   = order?.data   || {};
+  const lastData  = lastOrder?.data || {};
+  const shrimpQty = curData[SHRIMP_ID]?.order || 0;
+  const breadQty  = lastData[BREAD_ID]?.order  || 0;
+  let regularBoxes = 0;
+  let looseFrac    = 0; // 基礎混合箱分量（香蒜醬+青醬，不含蝦碎）
+  PRODUCTS.forEach(p => {
+    if (p.special) return; // 餐包另算
+    if (p.noBox)   return; // 哈密瓜不計箱
+    if (p.id === SHRIMP_ID) return; // 蝦碎另算
+    const qty = curData[p.id]?.order || 0;
+    if (!qty) return;
+    if (LOOSE_BOX_ADMIN_DEFAULT.hasOwnProperty(p.id)) {
+      const perBox = LOOSE_BOX_ADMIN_DEFAULT[p.id];
+      if (perBox > 0) looseFrac += qty / perBox; // 牛排鹽 perBox=0 → 略過
+    } else if (p.unit === '箱') {
+      regularBoxes += qty;
+    }
+  });
+  // 蝦碎：>2包 → 新增1個混合箱
+  const extraShrimpBox = shrimpQty > 2 ? 1 : 0;
+  // 混合箱總數（基礎散裝 + 蝦碎超量箱）
+  const totalMixBoxes = (looseFrac > 0 ? Math.ceil(looseFrac) : 0) + extraShrimpBox;
+  // 餐包：混合箱=1 → 混入不計；混合箱=0 → 自成1箱；混合箱≥2 → 另計1箱
+  let breadBoxes = 0;
+  if (breadQty > 0) {
+    if (totalMixBoxes !== 1) breadBoxes = calcBreadBoxes(breadQty);
+    // totalMixBoxes === 1：餐包混入現有混合箱，不額外計
+  }
+  return regularBoxes + (looseFrac > 0 ? Math.ceil(looseFrac) : 0) + extraShrimpBox + breadBoxes;
+}
 function calcCatBoxes(data, cat) {
   return _calcBoxesByCat(data, cat);  // 指定分類
 }
@@ -1541,28 +1580,98 @@ function renderStoreList() {
 // ========================
 
 function _buildShipRows(order, lastOrder) {
-  const BREAD_ID = 1367;
+  const BREAD_ID  = 1367; // 餐包（代訂，用上週數量）
+  const SHRIMP_ID = 1368; // 蝦碎
+  const SALT_ID   = 1051; // 牛排鹽
+  const EBI_ID    = 1315; // 炸蝦
+  const OSAKA_ID  = 792;  // 大阪燒
+
   const curData  = order?.data || {};
   const lastData = lastOrder?.data || {};
-  // 餐包（代訂）：本次出貨數量＝「上週」門市訂貨數量（本週訂的餐包是下週才出貨）
-  const getQty = (p) => (p.id === BREAD_ID ? (lastData[p.id]?.order || 0) : (curData[p.id]?.order || 0));
 
-  const orderedProds = PRODUCTS.filter(p => getQty(p) > 0);
-  const boxItems   = []; // unit==='箱'：完整箱，各自一列
-  const looseItems = []; // unit!=='箱'（包/罐等）：散裝，全部合併一列
+  const saltQty   = curData[SALT_ID]?.order   || 0;
+  const shrimpQty = curData[SHRIMP_ID]?.order  || 0;
+  const breadQty  = lastData[BREAD_ID]?.order  || 0; // 餐包用上週訂貨
 
-  orderedProds.forEach(p => {
-    const qty = getQty(p);
-    const sn  = p.short || p.name; // 優先使用品項管理的縮寫
-    if (p.unit === '箱') boxItems.push(`${sn}${qty}`);
-    else looseItems.push(`${sn}×${qty}`);
+  const SPECIAL_IDS = new Set([SALT_ID, SHRIMP_ID, BREAD_ID]);
+
+  // 箱裝品項 Map（排除特殊品項）
+  const boxMap = new Map();
+  PRODUCTS.forEach(p => {
+    if (SPECIAL_IDS.has(p.id)) return;
+    const qty = curData[p.id]?.order || 0;
+    if (!qty || p.unit !== '箱') return;
+    boxMap.set(p.id, { sn: p.short || p.name, qty, extras: [] });
   });
 
-  const rows = [...boxItems];
-  if (looseItems.length > 0) rows.push(looseItems.join('/'));
+  // 基礎混合箱內容（香蒜醬、青醬、哈密瓜等非箱裝品，不含特殊品項）
+  // 這些品項的所在列 = 混合箱
+  const mixItems = [];
+  PRODUCTS.forEach(p => {
+    if (SPECIAL_IDS.has(p.id)) return;
+    const qty = curData[p.id]?.order || 0;
+    if (!qty || p.unit === '箱') return;
+    mixItems.push(`${p.short || p.name}×${qty}`);
+  });
 
-  // 補空列到最少 13 列（一般門市品項數較少，避免列數過多導致跨頁；
-  // 若品項真的超過 13 列則自然增列，極端情況才會跨頁）
+  const findTarget = (ids) => ids.find(id => boxMap.has(id));
+
+  // 蝦碎 >2 時的第二個混合箱內容
+  const extraShrimpItems = [];
+  if (shrimpQty > 2) extraShrimpItems.push(`蝦碎×${shrimpQty}`);
+
+  // 1. 牛排鹽：有基礎混合箱 → 混入；否則 → 炸蝦 > 大阪燒（附在產品箱旁）
+  if (saltQty > 0) {
+    if (mixItems.length > 0) {
+      mixItems.push(`牛排鹽×${saltQty}`);
+    } else {
+      const t = findTarget([EBI_ID, OSAKA_ID]);
+      if (t) boxMap.get(t).extras.push(`牛排鹽×${saltQty}`);
+      else   mixItems.push(`牛排鹽×${saltQty}`); // fallback
+    }
+  }
+
+  // 2. 蝦碎 ≤2：有基礎混合箱 → 混入；否則 → 炸蝦旁
+  if (shrimpQty > 0 && shrimpQty <= 2) {
+    if (mixItems.length > 0) {
+      mixItems.push(`蝦碎×${shrimpQty}`);
+    } else {
+      const t = findTarget([EBI_ID]);
+      if (t) boxMap.get(t).extras.push(`蝦碎×${shrimpQty}`);
+      else   mixItems.push(`蝦碎×${shrimpQty}`); // fallback
+    }
+  }
+
+  // 計算混合箱數（決定餐包去向）
+  const hasMixBox      = mixItems.length > 0;
+  const hasExtraShrBox = extraShrimpItems.length > 0;
+  const totalMixBoxes  = (hasMixBox ? 1 : 0) + (hasExtraShrBox ? 1 : 0);
+
+  // 3. 餐包：混合箱 < 2 → 混入（基礎混合箱 or 蝦碎箱 or 新建）；≥2 → 獨立列
+  let breadRow = null;
+  if (breadQty > 0) {
+    if (totalMixBoxes < 2) {
+      if      (hasMixBox)      mixItems.push(`餐包×${breadQty}`);
+      else if (hasExtraShrBox) extraShrimpItems.push(`餐包×${breadQty}`);
+      else                     mixItems.push(`餐包×${breadQty}`); // 新建混合箱
+    } else {
+      breadRow = `餐包×${breadQty}`; // 混合箱已有2個，餐包獨立
+    }
+  }
+
+  // 組列
+  const rows = [];
+  PRODUCTS.forEach(p => {
+    if (!boxMap.has(p.id)) return;
+    const item = boxMap.get(p.id);
+    let label = `${item.sn}${item.qty}`;
+    if (item.extras.length) label += ' / ' + item.extras.join(' / ');
+    rows.push(label);
+  });
+  if (mixItems.length)      rows.push(mixItems.join('/'));          // 混合箱
+  if (hasExtraShrBox)       rows.push('混合箱/' + extraShrimpItems.join('/')); // 第2混合箱（蝦碎超量）
+  if (breadRow)             rows.push(breadRow);                   // 餐包獨立（已有2個混合箱）
+
   while (rows.length < 13) rows.push('');
   return rows;
 }
@@ -1595,8 +1704,8 @@ function generateShippingOrders() {
     const lastOrder = lastMap[store.key] || { data: {} };
     const rows = _buildShipRows(order, lastOrder);
     if (rows.every(r => !r)) return; // 全空略過
-    // 共計箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）
-    const storeBoxes = calcOrderBoxes(order.data || {}) + calcBreadBoxes(lastOrder?.data?.[BREAD_ID]?.order || 0);
+    // 共計箱數：套用新裝箱規則（牛排鹽散裝、蝦碎≤2混入、餐包M<2混入）
+    const storeBoxes = calcShipBoxes(order, lastOrder);
     pages.push({ store, rows, dateStr, storeBoxes });
   });
 
