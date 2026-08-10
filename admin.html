@@ -948,12 +948,14 @@ function renderStats() {
   const storesWithBread = realOrders.filter(o=>(o.data?.[1367]?.order||0)>0).length;
   const activeMaster = getActiveStoreMaster();
 
-  // 正確總箱數：各門市個別換算後加總（散裝品項 perBox 換算，牛排鹽/哈密瓜不計）
-  // 再加上本週出貨的餐包（上週已訂，用 calcBreadBoxes 換算）
-  // 餐包per店ceil後加總（與門市明細合計列邏輯一致，不可跨門市合箱）
-  // 不訂貨門市不計入箱數
-  const totalShipBoxes = realOrders.reduce((sum, o) => sum + calcOrderBoxes(o.data || {}), 0)
-                       + lastWeekOrders.filter(o=>o.data?._skip!==true).reduce((sum, o) => sum + calcBreadBoxes(o.data?.[1367]?.order || 0), 0);
+  // 正確總箱數：套用出貨單裝箱規則（青醬/蝦碎/餐包混合箱），與甫運物流表一致
+  const _lastMap = {}; lastWeekOrders.forEach(o => { _lastMap[o.store_key] = o; });
+  const totalShipBoxes =
+    realOrders.reduce((sum, o) => sum + calcShipBoxes(o, _lastMap[o.store_key] || {data:{}}), 0)
+    + lastWeekOrders.filter(lo =>
+        lo.data?._skip !== true && (lo.data?.[1367]?.order||0) > 0 &&
+        !realOrders.find(co => co.store_key === lo.store_key)
+      ).reduce((sum, lo) => sum + calcShipBoxes({data:{}}, lo), 0);
 
   document.getElementById('sSubmitted').textContent = submitted;
   document.getElementById('sPending').textContent   = activeMaster.length - submitted;
@@ -1066,7 +1068,17 @@ function renderDetailTable() {
     const o=orderMap[storeKey]; const oLast=lastMap[storeKey]; const data=o?.data||{};
     const isSkipOrder = data._skip === true;
     const cells=PRODUCTS.map(p=>{
-      if (isSkipOrder) return `<td class="qc off">—</td>${p.id===BREAD_ID?'<td class="qc off">—</td>':''}`;  // 不訂貨：全顯示 —
+      if (isSkipOrder) {
+        // 不訂貨：一般品項顯示—，但上週有訂餐包仍顯示（本週還是要出貨）
+        if (p.id === BREAD_ID) {
+          const vLast = oLast?.data?.[BREAD_ID]?.order || 0;
+          const deferTag = vLast > 0
+            ? `<span style="display:inline-block;background:#fef9c3;color:#b45309;border:1px solid #fde047;border-radius:4px;padding:1px 4px;font-size:10px;font-weight:700;margin-left:2px">延週</span>`
+            : '';
+          return `<td class="qc ${vLast>0?'on':'off'}" style="${vLast>0?'color:var(--special);font-weight:800':''}">${vLast>0?vLast+''+deferTag:'—'}</td><td class="qc off">—</td>`;
+        }
+        return `<td class="qc off">—</td>`;
+      }
       if (p.id===BREAD_ID) {
         if (isStockMode) {
           const sLast=oLast?.data?.[BREAD_ID]?.stock;
@@ -1090,8 +1102,8 @@ function renderDetailTable() {
       const v=data[p.id]?.order||0;
       return `<td class="qc ${v>0?'on':'off'}">${v>0?v:'—'}</td>`;
     });
-    // 箱數 = 本週一般品項箱數 + 上週訂的餐包換算箱數（本週出貨）（盤點模式不適用；不訂貨為0）
-    const rowBoxes = isSkipOrder ? 0 : ((o ? calcOrderBoxes(data) : 0) + calcBreadBoxes(oLast?.data?.[BREAD_ID]?.order || 0));
+    // 箱數：套用出貨單裝箱規則（青醬/蝦碎/餐包混合箱邏輯）
+    const rowBoxes = isSkipOrder ? 0 : (o ? calcShipBoxes(o, oLast || {data:{}}) : 0);
     const rowBoxesCell = isStockMode ? '—' : (isSkipOrder ? '—' : `${rowBoxes} 箱`);
 
     // 判斷是否截止後修改
@@ -1143,8 +1155,11 @@ function renderDetailTable() {
     const t=allOrders.reduce((s,o)=>s+(o.data?.[p.id]?.order||0),0);
     return `<td class="qc ${t>0?'on':'off'}">${t>0?`<strong>${t}</strong>`:'—'}</td>`;
   }).join('');
-  const grandBoxes = allOrders.reduce((s,o)=>s+calcOrderBoxes(o.data||{}),0)
-    + lastWeekOrders.reduce((s,o)=>s+calcBreadBoxes(o.data?.[BREAD_ID]?.order||0),0);
+  // 合計箱數：套用出貨單裝箱規則，與甫運物流表一致
+  const _grandLastMap = {}; lastWeekOrders.forEach(o => { _grandLastMap[o.store_key] = o; });
+  const grandBoxes = allOrders.reduce((s,o) => s + calcShipBoxes(o, _grandLastMap[o.store_key] || {data:{}}), 0)
+    + lastWeekOrders.filter(lo => (lo.data?.[BREAD_ID]?.order||0) > 0 && !allOrders.find(co => co.store_key === lo.store_key))
+                    .reduce((s,lo) => s + calcShipBoxes({data:{}}, lo), 0);
   const grandBoxesCell = isStockMode ? '—' : `${grandBoxes} 箱`;
   const totRow=`<tr class="total-row"><td>合計</td>${colTotalsHtml}<td class="grand">${grandBoxesCell}</td><td></td><td></td></tr>`;
   document.getElementById('detailBody').innerHTML=rows.join('')+totRow;
@@ -1164,23 +1179,30 @@ function calcBreadBoxes(qty) {
   return qty > 0 ? Math.ceil(qty / perBox) : 0;
 }
 // 出貨單專用箱數計算（套用混合箱裝箱規則）
-// 混合箱 = 香蒜醬/青醬/哈密瓜/牛排鹽/蝦碎/餐包 等散裝品共用的實體箱
+// 混合箱 = 香蒜醬/哈密瓜/牛排鹽/蝦碎/餐包 等散裝品共用的實體箱
 // 牛排鹽：perBox=0，不額外計箱
 // 蝦碎：≤2包 → 混入現有混合箱，不額外計；>2包 → 新增1個混合箱（+1箱）
+// 青醬：≤10包且有炸蝦 → 放入炸蝦箱，不另計；否則 → 混合箱
 // 餐包：混合箱數量=1 → 混入不計；混合箱=0或≥2 → 獨立計箱
 function calcShipBoxes(order, lastOrder) {
   const BREAD_ID  = 1367;
   const SHRIMP_ID = 1368;
+  const AOSA_ID   = 1283; // 青醬
+  const EBI_ID    = 1315; // 炸蝦
   const curData   = order?.data   || {};
   const lastData  = lastOrder?.data || {};
   const shrimpQty = curData[SHRIMP_ID]?.order || 0;
   const breadQty  = lastData[BREAD_ID]?.order  || 0;
+  const aosaQty   = curData[AOSA_ID]?.order    || 0;
+  const ebiQty    = curData[EBI_ID]?.order     || 0;
   let regularBoxes = 0;
-  let looseFrac    = 0; // 基礎混合箱分量（香蒜醬+青醬，不含蝦碎）
+  let looseFrac    = 0; // 基礎混合箱分量（香蒜醬等，不含蝦碎/牛排鹽）
   PRODUCTS.forEach(p => {
     if (p.special) return; // 餐包另算
     if (p.noBox)   return; // 哈密瓜不計箱
     if (p.id === SHRIMP_ID) return; // 蝦碎另算
+    // 青醬 ≤10 且有炸蝦 → 放入炸蝦箱，不另計散裝箱
+    if (p.id === AOSA_ID && aosaQty <= 10 && ebiQty > 0) return;
     const qty = curData[p.id]?.order || 0;
     if (!qty) return;
     if (LOOSE_BOX_ADMIN_DEFAULT.hasOwnProperty(p.id)) {
@@ -1320,12 +1342,13 @@ function renderLogistics() {
     const data=o?.data||{};
     const frozen = o ? calcCatBoxes(data, '冷凍') : 0;
     const ambient = o ? calcCatBoxes(data, '常温') : 0;
-    const breadBoxes = calcBreadBoxes(oLast?.data?.[1367]?.order||0);
-    const total=frozen+ambient+breadBoxes;
+    // 總箱數：用出貨單同款邏輯（青醬/蝦碎/餐包混合箱規則）
+    const total = o ? calcShipBoxes(o, oLast || {data:{}}) : 0;
     if (!total) return `<tr><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
     frozenGrand+=frozen; ambientGrand+=ambient; totalGrand+=total;
     storesWithOrder++;
-    const totalLabel=total+(breadBoxes>0?`<span style="font-size:11px;color:#7c3aed;font-weight:600">（含餐包${breadBoxes}箱）</span>`:'');
+    const breadBoxes = oLast ? calcBreadBoxes(oLast.data?.[1367]?.order||0) : 0;
+    const totalLabel=total+(breadBoxes>0?`<span style="font-size:11px;color:#7c3aed;font-weight:600">（含餐包${breadBoxes}包）</span>`:'');
     return `<tr><td><span class="region-badge">${sm.region}</span></td><td><strong>${sm.fullName||sm.key}</strong></td><td class="${frozen>0?'frozen-cell':'zero-cell'}">${frozen>0?frozen:'—'}</td><td class="${ambient>0?'ambient-cell':'zero-cell'}">${ambient>0?ambient:'—'}</td><td class="${total>0?'total-cell':'zero-cell'}">${totalLabel}</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
   });
   document.getElementById('logisticsBody').innerHTML=rows.join('')+`<tr class="total-row"><td colspan="2" style="font-weight:800">合計（${storesWithOrder} 家門市）</td><td class="frozen-cell">${frozenGrand}</td><td class="ambient-cell">${ambientGrand}</td><td class="total-cell">${totalGrand}</td><td colspan="2"></td></tr>`;
@@ -1585,6 +1608,7 @@ function _buildShipRows(order, lastOrder) {
   const SALT_ID   = 1051; // 牛排鹽
   const EBI_ID    = 1315; // 炸蝦
   const OSAKA_ID  = 792;  // 大阪燒
+  const AOSA_ID   = 1283; // 青醬
 
   const curData  = order?.data || {};
   const lastData = lastOrder?.data || {};
@@ -1592,8 +1616,10 @@ function _buildShipRows(order, lastOrder) {
   const saltQty   = curData[SALT_ID]?.order   || 0;
   const shrimpQty = curData[SHRIMP_ID]?.order  || 0;
   const breadQty  = lastData[BREAD_ID]?.order  || 0; // 餐包用上週訂貨
+  const aosaQty   = curData[AOSA_ID]?.order    || 0;
 
-  const SPECIAL_IDS = new Set([SALT_ID, SHRIMP_ID, BREAD_ID]);
+  // SPECIAL_IDS：這些品項不走「一般箱 or 基礎混合箱」路徑，各自另行處理
+  const SPECIAL_IDS = new Set([SALT_ID, SHRIMP_ID, BREAD_ID, AOSA_ID]);
 
   // 箱裝品項 Map（排除特殊品項）
   const boxMap = new Map();
@@ -1604,8 +1630,7 @@ function _buildShipRows(order, lastOrder) {
     boxMap.set(p.id, { sn: p.short || p.name, qty, extras: [] });
   });
 
-  // 基礎混合箱內容（香蒜醬、青醬、哈密瓜等非箱裝品，不含特殊品項）
-  // 這些品項的所在列 = 混合箱
+  // 基礎混合箱內容（香蒜醬、哈密瓜等非箱裝品，排除特殊品項）
   const mixItems = [];
   PRODUCTS.forEach(p => {
     if (SPECIAL_IDS.has(p.id)) return;
@@ -1616,29 +1641,42 @@ function _buildShipRows(order, lastOrder) {
 
   const findTarget = (ids) => ids.find(id => boxMap.has(id));
 
-  // 蝦碎 >2 時的第二個混合箱內容
+  // 青醬：≤10 且有炸蝦 → 附在炸蝦箱旁（extras）；否則 → 基礎混合箱
+  if (aosaQty > 0) {
+    if (aosaQty <= 10 && boxMap.has(EBI_ID)) {
+      boxMap.get(EBI_ID).extras.push(`青醬×${aosaQty}`);
+    } else {
+      mixItems.push(`青醬×${aosaQty}`);
+    }
+  }
+
+  // 蝦碎 >2 時的第二個混合箱
   const extraShrimpItems = [];
   if (shrimpQty > 2) extraShrimpItems.push(`蝦碎×${shrimpQty}`);
 
-  // 1. 牛排鹽：有基礎混合箱 → 混入；否則 → 炸蝦 > 大阪燒（附在產品箱旁）
+  // willHaveMixBox：是否「已有」或「即將建立」混合箱
+  // （基礎散裝品項 OR 上週餐包 → 必然會有混合箱）
+  const willHaveMixBox = mixItems.length > 0 || breadQty > 0;
+
+  // 1. 牛排鹽：有（或將有）混合箱 → 混入；否則 → 炸蝦 > 大阪燒旁
   if (saltQty > 0) {
-    if (mixItems.length > 0) {
+    if (willHaveMixBox) {
       mixItems.push(`牛排鹽×${saltQty}`);
     } else {
       const t = findTarget([EBI_ID, OSAKA_ID]);
       if (t) boxMap.get(t).extras.push(`牛排鹽×${saltQty}`);
-      else   mixItems.push(`牛排鹽×${saltQty}`); // fallback
+      else   mixItems.push(`牛排鹽×${saltQty}`);
     }
   }
 
-  // 2. 蝦碎 ≤2：有基礎混合箱 → 混入；否則 → 炸蝦旁
+  // 2. 蝦碎 ≤2：有（或將有）混合箱 → 混入；否則 → 炸蝦旁
   if (shrimpQty > 0 && shrimpQty <= 2) {
-    if (mixItems.length > 0) {
+    if (willHaveMixBox) {
       mixItems.push(`蝦碎×${shrimpQty}`);
     } else {
       const t = findTarget([EBI_ID]);
       if (t) boxMap.get(t).extras.push(`蝦碎×${shrimpQty}`);
-      else   mixItems.push(`蝦碎×${shrimpQty}`); // fallback
+      else   mixItems.push(`蝦碎×${shrimpQty}`);
     }
   }
 
@@ -1647,30 +1685,36 @@ function _buildShipRows(order, lastOrder) {
   const hasExtraShrBox = extraShrimpItems.length > 0;
   const totalMixBoxes  = (hasMixBox ? 1 : 0) + (hasExtraShrBox ? 1 : 0);
 
-  // 3. 餐包：混合箱 < 2 → 混入（基礎混合箱 or 蝦碎箱 or 新建）；≥2 → 獨立列
+  // 3. 餐包：混合箱 < 2 → 混入；≥2 → 獨立列
   let breadRow = null;
   if (breadQty > 0) {
     if (totalMixBoxes < 2) {
       if      (hasMixBox)      mixItems.push(`餐包×${breadQty}`);
       else if (hasExtraShrBox) extraShrimpItems.push(`餐包×${breadQty}`);
-      else                     mixItems.push(`餐包×${breadQty}`); // 新建混合箱
+      else                     mixItems.push(`餐包×${breadQty}`);
     } else {
-      breadRow = `餐包×${breadQty}`; // 混合箱已有2個，餐包獨立
+      breadRow = `餐包×${breadQty}`;
     }
   }
 
-  // 組列
+  // 組列（炸蝦 qty>1 且有 extras → 分成兩行）
   const rows = [];
   PRODUCTS.forEach(p => {
     if (!boxMap.has(p.id)) return;
     const item = boxMap.get(p.id);
-    let label = `${item.sn}${item.qty}`;
-    if (item.extras.length) label += ' / ' + item.extras.join(' / ');
-    rows.push(label);
+    if (item.extras.length > 0 && item.qty > 1) {
+      // 分行：前 qty-1 箱純品項；最後1箱附帶 extras
+      rows.push(`${item.sn}${item.qty - 1}`);
+      rows.push(`${item.sn}1 / ${item.extras.join(' / ')}`);
+    } else if (item.extras.length > 0) {
+      rows.push(`${item.sn}${item.qty} / ${item.extras.join(' / ')}`);
+    } else {
+      rows.push(`${item.sn}${item.qty}`);
+    }
   });
-  if (mixItems.length)      rows.push(mixItems.join('/'));          // 混合箱
-  if (hasExtraShrBox)       rows.push('混合箱/' + extraShrimpItems.join('/')); // 第2混合箱（蝦碎超量）
-  if (breadRow)             rows.push(breadRow);                   // 餐包獨立（已有2個混合箱）
+  if (mixItems.length)  rows.push(mixItems.join('/'));
+  if (hasExtraShrBox)   rows.push('混合箱/' + extraShrimpItems.join('/'));
+  if (breadRow)         rows.push(breadRow);
 
   while (rows.length < 13) rows.push('');
   return rows;
@@ -1836,6 +1880,7 @@ function exportLogisticsCSV() {
   if (!allOrders.length) { alert('本週尚無訂單資料'); return; }
   const wf=document.getElementById('weekFilter'); const weekLabel=wf.options[wf.selectedIndex].text;
   const orderMap={}; allOrders.forEach(o=>{orderMap[o.store_key]=o;});
+  const lastMap_csv={}; lastWeekOrders.forEach(o=>{lastMap_csv[o.store_key]=o;});
   const frozenProds=PRODUCTS.filter(p=>p.cat==='冷凍');
   const ambientProds=PRODUCTS.filter(p=>p.cat==='常温');
   const activeMaster=_sortStores(getActiveStoreMaster());
@@ -1848,7 +1893,8 @@ function exportLogisticsCSV() {
       const data=o.data||{};
       const frozen = calcCatBoxes(data, '冷凍');
       const ambient = calcCatBoxes(data, '常温');
-      return [sm.code,sm.region,sm.fullName||sm.key,frozen||'',ambient||'',frozen+ambient||'',sm.address,sm.phone];
+      const total = calcShipBoxes(o, lastMap_csv[sm.key]||{data:{}});
+      return [sm.code,sm.region,sm.fullName||sm.key,frozen||'',ambient||'',total||'',sm.address,sm.phone];
     }),
   ];
   downloadCSV(rows, `甫運物流出貨單_${weekLabel.replace(/[\/～（）\s]/g,'-')}.csv`);
@@ -3258,6 +3304,8 @@ init();
     if (typeof allOrders === 'undefined') return;
     var orderMap = {};
     (allOrders || []).forEach(function(o){ orderMap[o.store_key] = o; });
+    var lastOrderMap = {};
+    (typeof lastWeekOrders !== 'undefined' ? lastWeekOrders : []).forEach(function(o){ lastOrderMap[o.store_key] = o; });
     var fp = PRODUCTS.filter(function(p){ return p.cat === '冷凍'; });
     var ap = PRODUCTS.filter(function(p){ return p.cat === '常温'; });
     var ms = typeof getActiveStoreMaster === 'function' ? getActiveStoreMaster() : [];
@@ -3269,7 +3317,7 @@ init();
     var rows = ds.map(function(sm) {
       var o = orderMap[sm.key];
       if (!o) return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td>'+(sm.fullName||sm.key)+'</td><td class="zero-cell">-</td><td class="zero-cell">-</td><td class="zero-cell">-</td><td>'+sm.address+'</td><td>'+sm.phone+'</td></tr>';
-      var d=o.data||{}, f=calcCatBoxes(d,'冷凍'), a=calcCatBoxes(d,'常温'), t=f+a; tot+=t;
+      var d=o.data||{}, f=calcCatBoxes(d,'冷凍'), a=calcCatBoxes(d,'常温'), t=calcShipBoxes(o, lastOrderMap[sm.key]||{data:{}}); tot+=t;
       return '<tr><td><span class="region-badge">'+sm.region+'</span></td><td><strong>'+(sm.fullName||sm.key)+'</strong></td>'
         +'<td class="'+(f>0?'frozen-cell':'zero-cell')+'">'+(f||'-')+'</td>'
         +'<td class="'+(a>0?'ambient-cell':'zero-cell')+'">'+(a||'-')+'</td>'

@@ -543,6 +543,7 @@ const T = {
     submittedBannerPastDeadline:'✅ 本週已送出訂單，截止時間（週一 10:00）已過，如需修改請聯絡總部',
     btnSkipWeek:'本週不訂貨',
     skipWeekConfirm:'確定本週不訂貨？\n（此操作將通知總部本週無需備貨）',
+    skipWeekBreadConfirm:'⚠️ 上週已訂購 {qty} 包餐包，本週原定隨貨出貨。\n\n選擇「不訂貨」後，這批餐包將延至下週一起配送。\n\n確定本週不訂貨嗎？',
     skipWeekToast:'✅ 已登記本週不訂貨',
     submittedBannerSkip:'🚫 本週已登記不訂貨，截止前（週一 10:00）可按「解鎖修改」取消或改為訂貨',
     submittedBannerSkipPastDeadline:'🚫 本週已登記不訂貨，截止時間已過，如需調整請聯絡總部',
@@ -615,6 +616,7 @@ const T = {
     submittedBannerPastDeadline:'✅ 今週の発注を送信済みです。締め切り（月曜10:00）を過ぎたため、変更はご連絡ください。',
     btnSkipWeek:'今週は発注なし',
     skipWeekConfirm:'今週は発注なしで確定しますか？',
+    skipWeekBreadConfirm:'⚠️ 先週 {qty} 袋の塩バターロールを注文しており、今週配送予定です。\n\n「発注なし」を選択すると、この配送は来週に延期されます。\n\n今週は発注なしで確定しますか？',
     skipWeekToast:'✅ 今週は発注なしを登録しました',
     submittedBannerSkip:'🚫 今週は発注なしで登録済みです。締め切り前なら「ロック解除」で変更できます',
     submittedBannerSkipPastDeadline:'🚫 今週は発注なしで登録済みです。締め切りを過ぎたため変更はご連絡ください。',
@@ -1363,7 +1365,13 @@ function unlockOrder() {
 
 async function skipWeek() {
   if (!currentStore || !currentWeek) return;
-  if (!confirm(t('skipWeekConfirm'))) return;
+  // 若上週有訂餐包，顯示特殊說明（餐包將延至下週）
+  if (lastWeekBreadQty > 0) {
+    const msg = t('skipWeekBreadConfirm').replace('{qty}', lastWeekBreadQty);
+    if (!confirm(msg)) return;
+  } else {
+    if (!confirm(t('skipWeekConfirm'))) return;
+  }
   const skipBtn = document.getElementById('skipWeekBtn');
   const submitBtn = document.getElementById('submitBtn');
   if (skipBtn) skipBtn.disabled = true;
@@ -1487,53 +1495,81 @@ function changeOrder(id, delta) {
 // 箱數估算
 // ========================
 function calcEstimatedBoxes() {
+  // 與後台 calcShipBoxes 邏輯一致
+  const SHRIMP_ID = 1368; // 蝦碎
+  const SALT_ID   = 1051; // 牛排鹽
+  const AOSA_ID   = 1283; // 青醬
+  const EBI_ID    = 1315; // 炸蝦
+
+  const shrimpQty = orderData[SHRIMP_ID]?.order || 0;
+  const ebiQty    = orderData[EBI_ID]?.order    || 0;
+  const aosaQty   = orderData[AOSA_ID]?.order   || 0;
+
   let regularBoxes = 0;
-  let looseFraction = 0;   // 散裝品項的總分數箱數（合併計算）
+  let looseFraction = 0;
   const regularBreakdown = [];
-  const looseItems = [];   // 散裝品項列表
-  const saltItems = [];    // 牛排鹽（完全不算箱）
+  const looseItems = [];
+  const saltItems  = [];
 
   PRODUCTS.forEach(p => {
-    if (p.special) return;  // 餐包為代訂（下週四出貨），不計入本週箱數
+    if (p.special) return;  // 餐包另算（下週四出貨）
+    if (p.noBox)   return;  // 哈密瓜不計箱
+    if (p.id === SHRIMP_ID) return; // 蝦碎 ≤2 不另計；>2 → extraShrimpBox
+    // 青醬 ≤10 且有炸蝦 → 放入炸蝦箱，不計散裝箱
+    if (p.id === AOSA_ID && aosaQty <= 10 && ebiQty > 0) return;
     const qty = orderData[p.id]?.order || 0; if (!qty) return;
     const pn = (currentLang==='ja' && PRODUCT_NAMES_JA[p.id]) ? PRODUCT_NAMES_JA[p.id] : p.name;
     const pnShort = pn.length > 6 ? pn.slice(0,6) : pn;
-    const unitLabel = p.unit === '箱' ? (currentLang==='ja'?'箱':'箱') : p.unit;
     if (LOOSE_BOX.hasOwnProperty(p.id)) {
       const perBox = LOOSE_BOX[p.id];
       if (perBox === 0) {
         saltItems.push(`${pnShort} ×${qty}${currentLang==='ja'?'（バラ）':'（散裝）'}`);
-      } else {
+      } else if (perBox > 0) {
         looseFraction += qty / perBox;
-        looseItems.push(`${pnShort} ×${qty}`);
+        looseItems.push(`${pnShort}×${qty}`);
       }
     } else if (p.unit === '箱') {
       regularBoxes += qty;
-      regularBreakdown.push(`${pnShort} ×${qty}${unitLabel}`);
-    } else {
-      regularBreakdown.push(`${pnShort} ×${qty}${p.unit}`);
+      regularBreakdown.push(`${pnShort}×${qty}箱`);
     }
   });
 
-  // 上週餐包（本週隨一般品項出貨）
+  // 蝦碎 >2 → 另加1個混合箱
+  const extraShrimpBox = shrimpQty > 2 ? 1 : 0;
+
+  // 基礎混合箱數
+  const baseMixBoxes = looseFraction > 0 ? Math.ceil(looseFraction) : 0;
+  const totalMixBoxes = baseMixBoxes + extraShrimpBox;
+
+  // 上週餐包（本週出貨）：混合箱=1 → 混入不計；=0 → 自成1箱；≥2 → 另計1箱
+  let breadBoxes = 0;
   if (lastWeekBreadQty > 0) {
-    const perBox = LOOSE_BOX[1367] || 6;
-    looseFraction += lastWeekBreadQty / perBox;
-    looseItems.push(currentLang==='ja' ? `先週パン ×${lastWeekBreadQty}` : `上週餐包 ×${lastWeekBreadQty}`);
+    if (totalMixBoxes !== 1) {
+      const perBox = LOOSE_BOX[1367] || 6;
+      breadBoxes = Math.ceil(lastWeekBreadQty / perBox);
+    }
+    // totalMixBoxes === 1：餐包混入現有混合箱，不另計
   }
 
-  // 散裝品項合併為整箱（無論幾分之幾都進位為整箱）
-  const looseBoxes = looseFraction > 0 ? Math.ceil(looseFraction) : 0;
-  const totalBoxes = regularBoxes + looseBoxes;
+  const totalBoxes = regularBoxes + baseMixBoxes + extraShrimpBox + breadBoxes;
 
   const breakdown = [...regularBreakdown];
-  if (looseBoxes > 0) {
-    const looseLabel = currentLang==='ja' ? `バラ梱包 ${looseBoxes}箱（${looseItems.join('・')}）` : `散裝 ${looseBoxes}箱（${looseItems.join('、')}）`;
+  if (baseMixBoxes > 0) {
+    const looseLabel = currentLang==='ja'
+      ? `バラ梱包 ${baseMixBoxes}箱（${looseItems.join('・')}）`
+      : `散裝 ${baseMixBoxes}箱（${looseItems.join('、')}）`;
     breakdown.push(looseLabel);
   }
-  if (saltItems.length) {
-    breakdown.push(...saltItems);
+  if (extraShrimpBox > 0) {
+    breakdown.push(currentLang==='ja' ? '蝦碎追加1箱' : '蝦碎 追加1箱');
   }
+  if (breadBoxes > 0) {
+    const breadLabel = currentLang==='ja'
+      ? `先週パン ${breadBoxes}箱（${lastWeekBreadQty}袋）`
+      : `上週餐包 ${breadBoxes}箱（${lastWeekBreadQty}包）`;
+    breakdown.push(breadLabel);
+  }
+  if (saltItems.length) breakdown.push(...saltItems);
 
   return { boxes: totalBoxes, breakdown };
 }
