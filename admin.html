@@ -1178,6 +1178,18 @@ function calcBreadBoxes(qty) {
   const perBox = LOOSE_BOX_ADMIN_DEFAULT[1367] || 6;
   return qty > 0 ? Math.ceil(qty / perBox) : 0;
 }
+// 本週應出貨餐包數（上週正常訂購 + 上週延週帶入）
+function getBreadQty(lastOrder) {
+  const d = lastOrder?.data || {};
+  return (d[1367]?.order || 0) + (d._deferBread || 0);
+}
+// 判斷門市是否「只有餐包、無一般品項」→ 餐包應延週
+function isBreadOnly(order, lastOrder) {
+  if (getBreadQty(lastOrder) === 0) return false; // 沒有餐包，無需延週
+  const d = order?.data || {};
+  if (d._skip) return true; // 選了「本週不訂貨」
+  return !PRODUCTS.some(p => !p.special && (d[p.id]?.order || 0) > 0); // 無一般品項
+}
 // 出貨單專用箱數計算（套用混合箱裝箱規則）
 // 混合箱 = 香蒜醬/哈密瓜/牛排鹽/蝦碎/餐包 等散裝品共用的實體箱
 // 牛排鹽：perBox=0，不額外計箱
@@ -1192,7 +1204,7 @@ function calcShipBoxes(order, lastOrder) {
   const curData   = order?.data   || {};
   const lastData  = lastOrder?.data || {};
   const shrimpQty = curData[SHRIMP_ID]?.order || 0;
-  const breadQty  = lastData[BREAD_ID]?.order  || 0;
+  const breadQty  = getBreadQty(lastOrder); // 含正常訂購 + 延週帶入
   const aosaQty   = curData[AOSA_ID]?.order    || 0;
   const ebiQty    = curData[EBI_ID]?.order     || 0;
   let regularBoxes = 0;
@@ -1340,6 +1352,13 @@ function renderLogistics() {
     const o=orderMap[sm.key];
     const oLast=lastMap[sm.key];
     const data=o?.data||{};
+
+    // 延週門市（只有餐包、無一般品項）→ 特殊標示，不計入總箱數
+    if (isBreadOnly(o || {data:{}}, oLast || {data:{}})) {
+      const deferQty = getBreadQty(oLast || {data:{}});
+      return `<tr style="opacity:0.55"><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="text-align:center;font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;white-space:nowrap">🕐 餐包延週 ${deferQty} 包</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
+    }
+
     const frozen = o ? calcCatBoxes(data, '冷凍') : 0;
     const ambient = o ? calcCatBoxes(data, '常温') : 0;
     // 總箱數：用出貨單同款邏輯（青醬/蝦碎/餐包混合箱規則）
@@ -1347,8 +1366,8 @@ function renderLogistics() {
     if (!total) return `<tr><td><span class="region-badge">${sm.region}</span></td><td>${sm.fullName||sm.key}</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td class="zero-cell">—</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
     frozenGrand+=frozen; ambientGrand+=ambient; totalGrand+=total;
     storesWithOrder++;
-    const breadBoxes = oLast ? calcBreadBoxes(oLast.data?.[1367]?.order||0) : 0;
-    const totalLabel=total+(breadBoxes>0?`<span style="font-size:11px;color:#7c3aed;font-weight:600">（含餐包${breadBoxes}包）</span>`:'');
+    const breadQtyLabel = getBreadQty(oLast || {data:{}});
+    const totalLabel=total+(breadQtyLabel>0?`<span style="font-size:11px;color:#7c3aed;font-weight:600">（含餐包${breadQtyLabel}包）</span>`:'');
     return `<tr><td><span class="region-badge">${sm.region}</span></td><td><strong>${sm.fullName||sm.key}</strong></td><td class="${frozen>0?'frozen-cell':'zero-cell'}">${frozen>0?frozen:'—'}</td><td class="${ambient>0?'ambient-cell':'zero-cell'}">${ambient>0?ambient:'—'}</td><td class="${total>0?'total-cell':'zero-cell'}">${totalLabel}</td><td style="font-size:12px;color:var(--muted)">${sm.address}</td><td style="font-size:12px">${sm.phone}</td></tr>`;
   });
   document.getElementById('logisticsBody').innerHTML=rows.join('')+`<tr class="total-row"><td colspan="2" style="font-weight:800">合計（${storesWithOrder} 家門市）</td><td class="frozen-cell">${frozenGrand}</td><td class="ambient-cell">${ambientGrand}</td><td class="total-cell">${totalGrand}</td><td colspan="2"></td></tr>`;
@@ -1360,8 +1379,17 @@ function renderLogistics() {
   document.getElementById('breadShipWeekLabel').textContent=`配送日：${fmt(thu)}（上週訂單）`;
   document.getElementById('breadBuyWeekLabel').textContent=`供 ${fmt(nextThu)} 配送，週三前向廠商下單`;
 
-  const shipRows=activeMaster.map(sm=>{const o=lastMap[sm.key];const qty=o?.data?.[1367]?.order||0;if(!qty)return'';return`<tr><td><strong>${sm.fullName||sm.key}</strong></td><td class="qc on">${qty}</td><td style="font-size:12px;color:var(--primary)">本週四（${fmt(thu)}）隨一般品項出貨</td></tr>`;}).filter(Boolean);
-  const shipTotal=lastWeekOrders.reduce((s,o)=>s+(o.data?.[1367]?.order||0),0);
+  const shipRows=activeMaster.map(sm=>{
+    const oLast=lastMap[sm.key];
+    const qty=getBreadQty(oLast); // 含延週帶入
+    if(!qty)return'';
+    const isDefer=isBreadOnly(orderMap[sm.key]||{data:{}}, oLast||{data:{}});
+    const note=isDefer
+      ? `<span style="color:#b45309;font-weight:800">⚠️ 延週（本週無一般品項，下週一起出貨）</span>`
+      : `本週四（${fmt(thu)}）隨一般品項出貨`;
+    return`<tr><td><strong>${sm.fullName||sm.key}</strong></td><td class="qc on">${qty}</td><td style="font-size:12px">${note}</td></tr>`;
+  }).filter(Boolean);
+  const shipTotal=activeMaster.reduce((s,sm)=>s+getBreadQty(lastMap[sm.key]),0);
   document.getElementById('breadShipBody').innerHTML=shipRows.length?shipRows.join('')+`<tr class="total-row"><td>合計</td><td class="grand">${shipTotal}</td><td></td></tr>`:'<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:16px">本週無餐包出貨</td></tr>';
 
   const buyRows=activeMaster.map(sm=>{const o=orderMap[sm.key];const qty=o?.data?.[1367]?.order||0;if(!qty)return'';return`<tr><td><strong>${sm.fullName||sm.key}</strong></td><td class="qc on">${qty}</td><td style="font-size:12px;color:var(--special)">下週四（${fmt(nextThu)}）配送</td></tr>`;}).filter(Boolean);
@@ -1615,7 +1643,7 @@ function _buildShipRows(order, lastOrder) {
 
   const saltQty   = curData[SALT_ID]?.order   || 0;
   const shrimpQty = curData[SHRIMP_ID]?.order  || 0;
-  const breadQty  = lastData[BREAD_ID]?.order  || 0; // 餐包用上週訂貨
+  const breadQty  = getBreadQty(lastOrder); // 上週正常訂購 + 延週帶入
   const aosaQty   = curData[AOSA_ID]?.order    || 0;
 
   // SPECIAL_IDS：這些品項不走「一般箱 or 基礎混合箱」路徑，各自另行處理
@@ -1736,19 +1764,26 @@ function generateShippingOrders() {
   const BREAD_ID = 1367;
 
   const storeMaster  = getEffectiveStoreMaster();
-  // 含「本週有訂貨」或「上週訂了餐包（本週要出貨）」的門市
+  // 含「本週有訂貨」或「有餐包待出貨（含延週帶入）」的門市
   const sortedStores = _sortStores(storeMaster).filter(s =>
     allOrders.find(o => o.store_key === s.key) ||
-    (lastMap[s.key]?.data?.[BREAD_ID]?.order || 0) > 0
+    getBreadQty(lastMap[s.key]) > 0
   );
 
   const pages = [];
+  const deferredStores = []; // 僅餐包、本週應延週的門市 {store, breadQty}
   sortedStores.forEach(store => {
     const order     = allOrders.find(o => o.store_key === store.key) || { data: {} };
     const lastOrder = lastMap[store.key] || { data: {} };
+
+    // 只有餐包、無一般品項 → 延週，不生成出貨單
+    if (isBreadOnly(order, lastOrder)) {
+      deferredStores.push({ store, breadQty: getBreadQty(lastOrder) });
+      return;
+    }
+
     const rows = _buildShipRows(order, lastOrder);
     if (rows.every(r => !r)) return; // 全空略過
-    // 共計箱數：套用新裝箱規則（牛排鹽散裝、蝦碎≤2混入、餐包M<2混入）
     const storeBoxes = calcShipBoxes(order, lastOrder);
     pages.push({ store, rows, dateStr, storeBoxes });
   });
@@ -1838,6 +1873,34 @@ td{padding:2px 6px;vertical-align:middle}
   win.focus();
   setTimeout(() => { win.print(); }, 600);
   showToast(`✅ 已開啟 ${pages.length} 家門市出貨單`);
+
+  // 延週門市：自動將餐包數量寫入本週訂單 _deferBread，下週自動帶入
+  if (deferredStores.length > 0) {
+    const deferList = deferredStores
+      .map(d => `・${d.store.fullName || d.store.key}（${d.breadQty} 包）`)
+      .join('\n');
+    // 非同步儲存
+    (async () => {
+      for (const { store, breadQty } of deferredStores) {
+        const existingOrder = allOrders.find(o => o.store_key === store.key);
+        const newData = existingOrder ? { ...(existingOrder.data || {}) } : {};
+        newData._deferBread = breadQty; // 設定（覆蓋，不疊加）
+        try {
+          await sb.from('orders').upsert(
+            { store_key: store.key, week_date: weekKey, data: newData },
+            { onConflict: 'store_key,week_date' }
+          );
+        } catch(e) { console.error('延週儲存失敗', store.key, e); }
+      }
+      showToast(`🕐 ${deferredStores.length} 家門市餐包已標記延週`);
+    })();
+    setTimeout(() => {
+      alert(
+        `⚠️ 以下 ${deferredStores.length} 家門市本週僅有餐包（無一般品項），` +
+        `已自動延至下週一起出貨：\n\n${deferList}`
+      );
+    }, 400);
+  }
 }
 
 // ========================

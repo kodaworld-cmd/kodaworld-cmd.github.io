@@ -1269,7 +1269,7 @@ async function loadOrderState() {
   ]);
 
   // 上週餐包量（本週隨貨出貨）
-  lastWeekBreadQty = lastData?.data?.[1367]?.order || 0;
+  lastWeekBreadQty = (lastData?.data?.[1367]?.order || 0) + (lastData?.data?._deferBread || 0); // 含上週延週帶入
 
   // 本週截止時間（週一 10:00）：截止前店家可自行解鎖修改，截止後僅 admin/manager 可解鎖
   const weekMonday = new Date(currentWeek + 'T00:00:00');
