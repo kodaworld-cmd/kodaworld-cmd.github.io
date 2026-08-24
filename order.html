@@ -1078,6 +1078,10 @@ async function init() {
 }
 
 async function initMainApp(user, assignedStores) {
+  // 先設定 currentWeek，避免單一門市自動觸發 onStoreChange 時 loadOrderState 因 currentWeek 為空而 return
+  if (!currentWeek) {
+    currentWeek = localISODate(getOrderWeekMonday());
+  }
   // 載入門市清單（預設 + Supabase 自訂）
   const ss = document.getElementById('storeSelect');
   ss.innerHTML = '<option value="" id="optPlaceholderStore">選擇門市…</option>';
