@@ -339,7 +339,7 @@ tr:hover td { background: #f8fafc; }
           <h3>📋 全部門市列表</h3>
           <span style="font-size:12px;color:var(--muted)" id="storeCountLabel"></span>
         </div>
-        <button onclick="saveMinBoxes()" style="background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">💾 儲存最低箱數</button>
+        <button onclick="resetMinBoxesToDefault()" style="background:#fff;color:var(--primary);border:1.5px solid var(--primary);border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;margin-right:6px">↺ 重設為預設箱數</button><button onclick="saveMinBoxes()" style="background:var(--primary);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">💾 儲存最低箱數</button>
         <button onclick="saveStoreOrder()" style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;margin-left:6px">↕ 儲存排序</button>
       </div>
       <div class="table-wrap">
@@ -893,7 +893,7 @@ async function startAdmin() {
     cachedPerBox = pbRes.data?.value || {};
     cachedDisabledStores = dsRes.data?.value || [];
     cachedCustomStores = csRes.data || [];
-    cachedMinBoxes = { ...MIN_BOXES_INIT, ...(mbRes.data?.value || {}) };
+    cachedMinBoxes = mbRes.data?.value ? { ...mbRes.data.value } : { ...MIN_BOXES_INIT };
     cachedProductOrder = poRes.data?.value || [];
     cachedStoreOverrides    = siRes.data?.value || {};
     cachedStoreKeyOverrides = skRes.data?.value || {};
@@ -1539,6 +1539,15 @@ async function saveStoreEdit(key) {
         ));
       }
       saves.push(sb.from('user_store_access').update({ store_key: displayKey }).eq('store_key', key));
+      // 最低箱數以店名為 key，改名時一併搬移
+      if (cachedMinBoxes[key] !== undefined) {
+        cachedMinBoxes = { ...cachedMinBoxes, [displayKey]: cachedMinBoxes[key] };
+        delete cachedMinBoxes[key];
+        saves.push(sb.from('settings').upsert(
+          { key: 'min_boxes_settings', value: cachedMinBoxes, updated_at: new Date().toISOString() },
+          { onConflict: 'key' }
+        ));
+      }
     }
     const results = await Promise.all(saves);
     const err = results.find(r => r.error)?.error;
@@ -1571,20 +1580,28 @@ async function deleteCustomStore(key) {
   }
 }
 
-async function saveMinBoxes() {
-  const all = getEffectiveStoreMaster();
-  const data = {};
-  all.forEach(s => {
-    const inputId = 'mb_' + s.key.replace(/[^a-z0-9]/gi,'_');
-    const inp = document.getElementById(inputId);
-    if (inp) {
-      const val = parseInt(inp.value) || MIN_BOXES_DEFAULT;
-      if (val !== MIN_BOXES_DEFAULT) data[s.key] = val;  // 只存非預設值
-    }
+// 以門市代號判斷（不受改名影響）：這 5 家 6 箱，其餘 4 箱
+const MIN_BOXES_6_CODES = ['00021','00023','00025','00029','00031']; // 宜蘭萬家福、南投萬家福、新店碧潭、新店萬家福、南投埔里
+function resetMinBoxesToDefault() {
+  const byKey = {}; getEffectiveStoreMaster().forEach(s => byKey[s.key] = s.code);
+  let n6 = 0;
+  document.querySelectorAll('#storeListBody input.mb-input').forEach(inp => {
+    const six = MIN_BOXES_6_CODES.includes(byKey[inp.dataset.storeKey]);
+    inp.value = six ? 6 : MIN_BOXES_DEFAULT; if (six) n6++;
   });
-  const { error } = await sb.from('settings').upsert({ key:'min_boxes_settings', value:data, updated_at:new Date().toISOString() });
+  showToast(`已填入預設值（${n6} 家 6 箱，其餘 4 箱），請確認後按「儲存最低箱數」`);
+}
+
+async function saveMinBoxes() {
+  const data = {};
+  document.querySelectorAll('#storeListBody input.mb-input').forEach(inp => {
+    const key = inp.dataset.storeKey;
+    const val = parseInt(inp.value, 10);
+    data[key] = (val > 0) ? val : MIN_BOXES_DEFAULT;   // 每家都存，不再只存非預設值
+  });
+  const { error } = await sb.from('settings').upsert({ key:'min_boxes_settings', value:data, updated_at:new Date().toISOString() }, { onConflict:'key' });
   if (error) { showToast('❌ 儲存失敗'); return; }
-  cachedMinBoxes = { ...MIN_BOXES_INIT, ...data };
+  cachedMinBoxes = { ...data };
   showToast('✅ 最低箱數已儲存！');
 }
 
@@ -1614,7 +1631,7 @@ function renderStoreList() {
       <td><span class="region-badge">${s.region}</span></td>
       <td style="font-size:12px;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis">${s.address}</td>
       <td style="font-size:12px">${s.phone}</td>
-      <td style="text-align:center"><input type="number" min="1" id="mb_${s.key.replace(/[^a-z0-9]/gi,'_')}" value="${getMinBoxes(s.key)}" style="width:48px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;text-align:center" title="${s.key} 最低出貨箱數"></td>
+      <td style="text-align:center"><input type="number" min="1" class="mb-input" data-store-key="${s.key}" value="${getMinBoxes(s.key)}" style="width:48px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;text-align:center" title="${s.key} 最低出貨箱數"></td>
       <td style="text-align:center"><span style="background:${isDisabled?'#fee2e2':'#f0fdf4'};color:${isDisabled?'var(--red)':'var(--green)'};padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700">${isDisabled?'停用':'啟用'}</span></td>
       <td style="text-align:center;white-space:nowrap">
         <button onclick="editStore('${s.key}')" style="background:#f0fdf4;color:var(--green);border:1px solid #86efac;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px">✏️ 編輯</button>
@@ -3518,7 +3535,7 @@ init();
 <!-- ═══ 版本標示：每次修改檔案，請把日期改成當天、序號 +1 ═══ -->
 <script>
 (function(){
-  window.APP_VERSION = 'v2026.07.08-1';
+  window.APP_VERSION = 'v2026.08.17-1';
   var b = document.createElement('div');
   b.textContent = 'admin ' + window.APP_VERSION;
   b.style.cssText = 'position:fixed;bottom:6px;right:8px;font-size:11px;color:#999;font-family:monospace;z-index:9999;pointer-events:none;opacity:.85;';
