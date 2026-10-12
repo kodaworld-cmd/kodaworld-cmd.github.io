@@ -574,6 +574,7 @@ const T = {
     btnBackEdit:'← 返回修改', btnSubmitDirect:'直接送出',
     deadlineWarnMsg:'因已超過下單時間，<br>請 另外LINE 通知央廚',
     btnCancel:'取消', btnConfirmSubmit:'確定送出',
+    lockedNoOrderBanner:'⛔ 本週訂貨已截止（週一 10:00），本週尚未下單。如需下單請聯絡總部代為處理', btnLocked:'⛔ 已截止', lockedToast:'⛔ 已超過截止時間（週一 10:00），無法送出或修改，請聯絡總部',
     breadNextWeek:'　＋下週餐包 {qty} 包',
     // 異常通報
     navIssue:'異常通報', btnLogout:'登出', logoutConfirm:'確定要登出嗎？',
@@ -647,6 +648,7 @@ const T = {
     btnBackEdit:'← 戻って編集', btnSubmitDirect:'このまま送信',
     deadlineWarnMsg:'締め切り時間を過ぎているため、<br>LINEで本部へご連絡ください',
     btnCancel:'キャンセル', btnConfirmSubmit:'送信を確定',
+    lockedNoOrderBanner:'⛔ 今週の発注は締め切りました（月曜10:00）。今週は未発注です。発注が必要な場合は本部へご連絡ください', btnLocked:'⛔ 締め切り済み', lockedToast:'⛔ 締め切り（月曜10:00）を過ぎたため、送信・変更できません。本部へご連絡ください',
     breadNextWeek:'　＋来週パン {qty} 袋',
     // 異常通報
     navIssue:'異常報告', btnLogout:'ログアウト', logoutConfirm:'ログアウトしますか？',
@@ -755,12 +757,14 @@ function applyLang() {
   document.querySelector('.special-notice').innerHTML = l.breadNotice;
   const banner = document.getElementById('submittedBanner');
   if (banner) {
-    if (canUnlockCurrent) banner.textContent = l.submittedBannerEditable;
+    if (storeNoOrderLocked) banner.textContent = l.lockedNoOrderBanner;
+    else if (canUnlockCurrent) banner.textContent = l.submittedBannerEditable;
     else if (storeDeadlinePassed) banner.textContent = l.submittedBannerPastDeadline || l.submittedBanner;
     else banner.textContent = l.submittedBanner;
   }
   const btn = document.getElementById('submitBtn');
-  if (btn && !isSubmitted) btn.textContent = l.btnSubmit;
+  if (btn && storeNoOrderLocked) btn.textContent = l.btnLocked;
+  else if (btn && !isSubmitted) btn.textContent = l.btnSubmit;
   const skipBtn = document.getElementById('skipWeekBtn');
   if (skipBtn) skipBtn.textContent = l.btnSkipWeek;
   // 尚未選擇門市時，標題副標保持與目前語言一致
@@ -826,6 +830,14 @@ let currentWeek = '';
 let orderData = {};
 let isSubmitted = false;
 let canUnlockCurrent = false; // 目前帳號是否可解鎖修改本週訂單（影響 submittedBanner 文字）
+let storeNoOrderLocked = false; // store 角色、截止已過、且本週尚未下單
+// 門市帳號是否已超過本訂貨週的截止時間（週一 10:00）；admin/manager 不受限
+// 每次呼叫都以「當下時間」判斷，不受頁面何時打開影響
+function isStoreLocked() {
+  if (currentUserRole !== 'store' || !currentWeek) return false;
+  const dl = new Date(currentWeek + 'T00:00:00'); dl.setHours(10, 0, 0, 0);
+  return new Date() >= dl;
+}
 let storeDeadlinePassed = false; // store 角色但截止時間已過（顯示不同 banner 提示）
 let lastWeekBreadQty = 0;    // 上週餐包訂購量（本週隨貨出貨）
 let minBoxesSettings = {};   // { store_key: 最低箱數 }
@@ -1288,6 +1300,7 @@ async function loadOrderState() {
   // 診斷用 log（可在瀏覽器 console 確認角色與截止狀態）
   console.log('[訂貨系統] 角色:', currentUserRole, '| 截止前:', beforeDeadline, '| 可解鎖:', canUnlock, '| 截止時間:', weekDeadline.toLocaleTimeString('zh-TW'));
 
+  storeNoOrderLocked = false;
   const skipBtn = document.getElementById('skipWeekBtn');
   const isSkip = data?.data?._skip === true;
 
@@ -1330,6 +1343,17 @@ async function loadOrderState() {
         btn.onclick = null;
       }
     }
+  } else if (currentUserRole === 'store' && !beforeDeadline) {
+    // 截止後尚未下單：門市端不可送出，請總部代下
+    orderData = {};
+    isSubmitted = true;   // 以唯讀狀態顯示，避免輸入後才發現不能送
+    storeNoOrderLocked = true;
+    const banner = document.getElementById('submittedBanner');
+    banner.style.display = 'block';
+    banner.textContent = t('lockedNoOrderBanner');
+    if (skipBtn) skipBtn.style.display = 'none';
+    btn.textContent = t('btnLocked'); btn.className = 'submit-btn submitted'; btn.disabled = true;
+    btn.onclick = null;
   } else {
     orderData = {};
     isSubmitted = false;
@@ -1351,6 +1375,7 @@ async function loadOrderState() {
 }
 
 function unlockOrder() {
+  if (isStoreLocked()) { showToast(t('lockedToast')); loadOrderState(); return; }
   if (!confirm(t('unlockConfirm').replace('{store}', currentStore))) return;
   isSubmitted = false;
   orderData = {};
@@ -1369,6 +1394,7 @@ function unlockOrder() {
 
 async function skipWeek() {
   if (!currentStore || !currentWeek) return;
+  if (isStoreLocked()) { showToast(t('lockedToast')); loadOrderState(); return; }
   // 若上週有訂餐包，顯示特殊說明（餐包將延至下週）
   if (lastWeekBreadQty > 0) {
     const msg = t('skipWeekBreadConfirm').replace('{qty}', lastWeekBreadQty);
@@ -1672,11 +1698,11 @@ async function submitOrder() {
   const submitterName = document.getElementById('submitterName').value.trim();
   if (!submitterName) { showToast(t('toastName')); document.getElementById('submitterName').focus(); return; }
 
-  // 截止時間警示（週一 10:00 後 ＋ 週二、三、四，與 checkDeadline 邏輯一致）
-  const _now = new Date(); const _day = _now.getDay(); const _hour = _now.getHours();
-  if ((_day === 1 && _hour >= 10) || _day === 2 || _day === 3 || _day === 4) {
-    const go = await showDeadlineWarning();
-    if (!go) return;
+  // 截止檢查（以送出當下時間判斷）：門市帳號超過週一 10:00 一律不可送出／修改，請總部代下
+  if (isStoreLocked()) {
+    showToast(t('lockedToast'));
+    loadOrderState();
+    return;
   }
 
   // 最低箱數警示
