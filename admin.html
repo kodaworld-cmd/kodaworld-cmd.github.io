@@ -3440,9 +3440,16 @@ init();
   window.editDefaultProduct = function(id) {
     var _pd = (typeof PRODUCTS_DEFAULT !== 'undefined') ? PRODUCTS_DEFAULT : [];
     var _cp = (typeof cachedCustomProducts !== 'undefined') ? cachedCustomProducts : [];
-    var p = _pd.find(function(x){ return x.id===id; });
-    if (!p) return;
     var cur = _cp.find(function(x){ return x.id===id; }) || {};
+    var p = _pd.find(function(x){ return x.id===id; });
+    var isCustomOnly = false;
+    if (!p && cur.id) {
+      // 後台新增的自訂品項（不在內建清單）→ 以資料庫內容建立編輯資料
+      isCustomOnly = true;
+      p = { id: cur.id, name: cur.name, short: cur.short_name, unit: cur.unit, stockUnit: cur.stock_unit,
+            cat: cur.cat, perBoxDefault: cur.per_box_default, minQty: cur.min_qty, step: cur.step };
+    }
+    if (!p) { showToast('找不到品項 #' + id + '，請重新整理頁面'); return; }
     var bt=cur.box_type||'box', cat=cur.cat||p.cat||'冷凍', unit=cur.unit||p.unit||'箱';
     var old=document.getElementById('edModal'); if(old) old.remove();
     var m=document.createElement('div'); m.id='edModal';
@@ -3450,7 +3457,7 @@ init();
     var uOpts=['箱','包','罐','個'].map(function(u){ return '<option'+(unit===u?' selected':'')+'>'+u+'</option>'; }).join('');
     var lbDef=(typeof LOOSE_BOX_DEFAULT!=='undefined'&&LOOSE_BOX_DEFAULT[id])||10;
     m.innerHTML='<div style="background:#fff;border-radius:12px;padding:20px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.2)">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:15px;font-weight:800">✏️ 編輯預設品項</h3><button id="ed_x" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h3 style="font-size:15px;font-weight:800">✏️ '+(isCustomOnly?'編輯品項':'編輯預設品項')+'</h3><button id="ed_x" style="background:none;border:none;font-size:20px;cursor:pointer">✕</button></div>'
       +'<div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:12px">'
       +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項 ID</label><input value="'+p.id+'" disabled style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:monospace;background:#f8fafc;color:var(--muted)"></div>'
       +'<div><label style="font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:4px">品項名稱 *</label><input id="ed_n" value="'+(cur.name||p.name)+'" style="width:100%;padding:8px;border:1.5px solid var(--border);border-radius:7px;font-size:14px"></div>'
@@ -3491,7 +3498,7 @@ init();
       var sp=parseInt(document.getElementById('ed_sp').value)||1;
       if(!name){showToast('品項名稱不能為空');return;}
       var pbd=bt2==='loose'?lq:(bt2==='none'?1:pb);
-      var payload={id:id,name:name,short_name:sn,unit:u,stock_unit:stu,cat:cat2,box_type:bt2,loose_box_qty:lq,per_box_default:pbd,min_qty:mn,step:sp,is_active:true};
+      var payload={id:id,name:name,short_name:sn,unit:u,stock_unit:stu,cat:cat2,box_type:bt2,loose_box_qty:lq,per_box_default:pbd,min_qty:mn,step:sp,is_active:existing?(existing.is_active!==false):true};
       var err;
       if(existing){var r=await sb.from('custom_products').update(payload).eq('id',id);err=r.error;}
       else{var r2=await sb.from('custom_products').insert(payload);err=r2.error;}

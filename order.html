@@ -1126,7 +1126,9 @@ async function initMainApp(user, assignedStores) {
       id: p.id, name: p.name, unit: p.unit || '箱', stockUnit: p.stock_unit || p.unit || '包',
       cat: p.cat || '冷凍', special: p.special || false, noBox: p.no_box || false,
       minQty: p.min_qty > 1 ? p.min_qty : undefined, step: p.step > 1 ? p.step : (p.min_qty > 1 ? p.min_qty : undefined),
-      perBoxQty: p.loose_box_qty > 1 ? p.loose_box_qty : undefined, perBoxUnit: p.stock_unit || p.unit,
+      // 基本包裝數量：以後台「每箱個數」(per_box_default) 為準；散裝品項才退回 loose_box_qty
+      perBoxQty: p.per_box_default > 1 ? p.per_box_default : (p.loose_box_qty > 1 ? p.loose_box_qty : undefined),
+      perBoxUnit: p.stock_unit || p.unit, isCustom: true, boxType: p.box_type || 'box', looseBoxQty: p.loose_box_qty || 0,
     }));
     // 排序：優先使用後台設定的自訂順序，否則依 DEFAULT_PRODUCTS 原始順序
     const refOrder = productSortOrder.length ? productSortOrder : DEFAULT_PRODUCTS.map(p => p.id);
@@ -1457,7 +1459,7 @@ function renderProducts() {
         <div class="prod-row">
           <div>
             <div class="prod-name">${displayName}${isSpecial?`<span class="special-tag">${t('tagSpecial')}</span>`:''}</div>
-            <div class="prod-meta"><span class="prod-code">#${p.id}</span>${(()=>{const q=perBoxSettings[p.id]??p.perBoxQty??1;const su=p.stockUnit||p.unit;const isLoose=LOOSE_BOX_DEFAULT.hasOwnProperty(p.id)||p.noBox;return (q>1&&!isLoose)?` · <span style="color:#0369a1;font-weight:700">每${p.unit} ${q} ${su}</span>`:'';})()}${p.minQty?`　<span style="color:#d97706;font-weight:700">最低${p.minQty}${p.step&&p.step>1?`，${p.step}的倍數`:''}</span>`:''}</div>
+            <div class="prod-meta"><span class="prod-code">#${p.id}</span>${(()=>{if(p.isCustom){const tag=x=>` · <span style="color:#0369a1;font-weight:700">${x}</span>`;if(p.boxType==='loose')return p.looseBoxQty>1?tag(`${p.looseBoxQty} ${p.unit}拼 1 箱`):'';if(p.boxType==='none'||p.noBox)return '';const q=p.perBoxQty??1;return q>1?tag(`每${p.unit} ${q} ${p.stockUnit||p.unit}`):'';}const q=perBoxSettings[p.id]??p.perBoxQty??1;const su=p.stockUnit||p.unit;const isLoose=LOOSE_BOX_DEFAULT.hasOwnProperty(p.id)||p.noBox;return (q>1&&!isLoose)?` · <span style="color:#0369a1;font-weight:700">每${p.unit} ${q} ${su}</span>`:'';})()}${p.minQty?`　<span style="color:#d97706;font-weight:700">最低${p.minQty}${p.step&&p.step>1?`，${p.step}的倍數`:''}</span>`:''}</div>
           </div>
           <div class="input-group">
             <div class="input-label-sm">${t('tagStockUnit')}${p.stockUnit||p.unit}</div>
